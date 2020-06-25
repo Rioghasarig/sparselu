@@ -101,7 +101,8 @@ contains
   subroutine lu1fac( m    , n    , nstop, nelem, lena , luparm, parmlu,       &
                      a    , indc , indr , p    , q     ,               &
                      lenc , lenr , locc , locr ,                       &
-                     iploc, iqloc, ipinv, iqinv, w     , inform )
+                     iploc, iqloc, ipinv, iqinv, w,                    &
+                     a2,    locc2, lenc2, indc2, inform )
 
     integer(ip),   intent(in)    :: m, n, nstop, nelem, lena
 
@@ -111,11 +112,12 @@ contains
                                     lenc(n)   , lenr(m)   ,            &
                                     iploc(n)  , iqloc(m)  ,            &
                                     ipinv(m)  , iqinv(n)  ,            &
-                                    locc(n)   , locr(m)
+                                    locc(n)   , locr(m)   
     real(rp),      intent(inout) :: parmlu(30), a(lena), w(n)
-
+    
     integer(ip),   intent(out)   :: inform
-
+    integer(ip),   intent(out)   :: locc2(n), lenc2(n), indc2(lena) 
+    real(rp),      intent(out)   :: a2(lena) 
     !------------------------------------------------------------------
     ! lu1fac computes a factorization A = L*U, where A is a sparse
     ! matrix with m rows and n columns, P*L*P' is lower triangular
@@ -588,137 +590,16 @@ contains
                  inform, lenL  , lenU  , minlen, mersum,               &
                  nUtri , nLtri , ndens1, ndens2, nrank , nslack,       &
                  Lmax  , Umax  , DUmax , DUmin , Akmax )
-
+    a2 = a
+    locc2 = locc
+    lenc2 = lenc
+    indc2 = indc 
     luparm(16) = nrank
     luparm(23) = lenL
     if (inform == 7) go to 970
     if (inform == 9) go to 985
     if (inform ==10) go to 981
     if (inform >  0) go to 980
-
-    if ( keepLU ) then
-       !---------------------------------------------------------------
-       ! The LU factors are at the top of  a, indc, indr,
-       ! with the columns of  L  and the rows of  U  in the order
-       !
-       ! ( free )   ... ( u3 ) ( l3 ) ( u2 ) ( l2 ) ( u1 ) ( l1 ).
-       !
-       ! Starting with ( l1 ) and ( u1 ), move the rows of  U  to the
-       ! left and the columns of  L  to the right, giving
-       !
-       ! ( u1 ) ( u2 ) ( u3 ) ...   ( free )   ... ( l3 ) ( l2 ) ( l1 ).
-       !
-       ! Also, set  numl0 = the number of nonempty columns of L.
-       !---------------------------------------------------------------
-       lu     = 0
-       ll     = lena  + 1
-       lm     = lena2 + 1
-       ltopl  = ll - lenL - lenU
-       lrow   = lenU
-
-       do k = 1, nrank
-          i       =   p(k)
-          lenUk   = - lenr(i)
-          lenr(i) =   lenUk
-          j       =   q(k)
-          lenLk   = - lenc(j) - 1
-          if (lenLk > 0) then
-             numl0        = numl0 + 1
-             iqloc(numl0) = lenLk
-          end if
-
-          if (lu + lenUk < ltopl) then
-             !=========================================================
-             ! There is room to move ( uk ).  Just right-shift ( lk ).
-             !=========================================================
-             do idummy = 1, lenLk
-                ll       = ll - 1
-                lm       = lm - 1
-                a(ll)    = a(lm)
-                indc(ll) = indc(lm)
-                indr(ll) = indr(lm)
-             end do
-          else
-             !=========================================================
-             ! There is no room for ( uk ) yet.  We have to
-             ! right-shift the whole of the remaining LU file.
-             ! Note that ( lk ) ends up in the correct place.
-             !=========================================================
-             llsave = ll - lenLk
-             nmove  = lm - ltopl
-
-             do idummy = 1, nmove
-                ll       = ll - 1
-                lm       = lm - 1
-                a(ll)    = a(lm)
-                indc(ll) = indc(lm)
-                indr(ll) = indr(lm)
-             end do
-
-             ltopl  = ll
-             ll     = llsave
-             lm     = ll
-          end if
-
-          !======================================================
-          ! Left-shift ( uk ).
-          !======================================================
-          locr(i) = lu + 1
-          l2      = lm - 1
-          lm      = lm - lenUk
-
-          do l = lm, l2
-             lu       = lu + 1
-             a(lu)    = a(l)
-             indr(lu) = indr(l)
-          end do
-       end do
-
-       !---------------------------------------------------------------
-       ! Save the lengths of the nonempty columns of  L,
-       ! and initialize  locc(j)  for the LU update routines.
-       !---------------------------------------------------------------
-       lenc(1:numl0) = iqloc(1:numl0)
-       locc(1:n)     = 0
-
-       !---------------------------------------------------------------
-       ! Test for singularity.
-       ! lu6chk  sets  nsing, jsing, jumin, Lmax, Umax, DUmax, DUmin
-       ! (including entries from the dense LU).
-       ! input      i1 = 1 means we're calling lu6chk from LUSOL.
-       ! output inform = 1 if there are singularities (nsing > 0).
-       ! 12 Dec 2015: nslack is now an input.
-       !---------------------------------------------------------------
-       call lu6chk( i1, m, n, nslack, w, lena, luparm, parmlu,         &
-                    a, indc, indr, p, q,                               &
-                    lenc, lenr, locc, locr, inform )
-       nsing  = luparm(11)
-       jsing  = luparm(12)
-       jumin  = luparm(19)
-       Lmax   = parmlu(11)
-       Umax   = parmlu(12)
-       DUmax  = parmlu(13)
-       DUmin  = parmlu(14)
-
-    else
-       !---------------------------------------------------------------
-       ! keepLU = 0.  L and U were not kept, just the diagonals of U.
-       ! lu1fac will probably be called again soon with keepLU = .true.
-       ! 11 Mar 2001: lu6chk revised.  We can call it with keepLU = 0,
-       !              but we want to keep Lmax, Umax from lu1fad.
-       ! 05 May 2002: Allow for TCP with new lu1DCP.  Diag(U) starts
-       !              below lena2, not lena.  Need lena2 in next line.
-       ! 12 Dec 2015: nslack is now an input.
-       !---------------------------------------------------------------
-       call lu6chk( i1, m, n, nslack, w, lena2, luparm, parmlu,        &
-                    a, indc, indr, p, q,                               &
-                    lenc, lenr, locc, locr, inform )
-       nsing  = luparm(11)
-       jsing  = luparm(12)
-       jumin  = luparm(19)
-       DUmax  = parmlu(13)
-       DUmin  = parmlu(14)
-    end if
 
     go to 990
 
