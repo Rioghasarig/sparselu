@@ -23,10 +23,6 @@ void __lusol_MOD_lu1fac(
   int64_t* ipinv,
   int64_t* iqinv,
   double* w,
-  double* a2,
-  int64_t* locc2,
-  int64_t* lenc2,
-  int64_t* indc2,
   int64_t* inform);
 
 void __lusol_MOD_lu6sol(
@@ -239,12 +235,8 @@ void clu1fac(
   int64_t* ipinv,
   int64_t* iqinv,
   double* w,
-  double* a2,
-  int64_t* locc2,
-  int64_t* lenc2,
-  int64_t* indc2, 
   int64_t* inform) {
-  __lusol_MOD_lu1fac(m,n,nstop, nelem,lena,luparm,parmlu,a,indc,indr,p,q,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,a2,locc2, lenc2, indc2, inform);
+  __lusol_MOD_lu1fac(m,n,nstop, nelem,lena,luparm,parmlu,a,indc,indr,p,q,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,inform);
 }
 
 void clu6sol(

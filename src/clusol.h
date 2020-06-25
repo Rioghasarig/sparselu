@@ -25,12 +25,7 @@ void clu1fac(
   int64_t* ipinv,
   int64_t* iqinv,
   double* w,
-  double* a2,
-  int64_t* locc2,
-  int64_t* lenc2,
-  int64_t* indc2, 
-  int64_t* inform
-  );
+  int64_t* inform);
 
 void clu6sol(
   int64_t* mode,

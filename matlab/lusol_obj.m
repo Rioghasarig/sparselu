@@ -119,10 +119,6 @@ classdef lusol_obj < handle
     iqinv_ptr = 0;
 
     % other
-    a2_ptr = 0; 
-    locc2_ptr = 0;
-    lenc2_ptr = 0; 
-    indc2_ptr = 0; 
 
     depcol_lx = 0; % logical index indicating dependent columns
     int_class = 'int64'; % integer class used for integer arrays
@@ -409,12 +405,8 @@ classdef lusol_obj < handle
       locc = zeros(n,1);
       iploc = zeros(n,1);
       iqinv = zeros(n,1);
-      
-      a2 = zeros(nzmax, 1); 
-      locc2 = zeros(n, 1);
-      lenc2 = zeros(n,1); 
-      indc2 = zeros(nzmax, 1, obj.int_class);
-	  %-- allocate and initialize libpointer "arrays" --%
+
+      %-- allocate and initialize libpointer "arrays" --%
       % integer scalars
       obj.m_ptr = libpointer(obj.int_ptr_class,m);
       obj.n_ptr = libpointer(obj.int_ptr_class,n);
@@ -438,10 +430,6 @@ classdef lusol_obj < handle
       obj.iqinv_ptr = libpointer(obj.int_ptr_class,iqinv);
 
       
-      obj.a2_ptr = libpointer('doublePtr', a2);
-      obj.locc2_ptr = libpointer(obj.int_ptr_class, locc2);
-      obj.lenc2_ptr = libpointer(obj.int_ptr_class, lenc2); 
-      obj.indc2_ptr = libpointer(obj.int_ptr_class, indc2); 
       obj.nstop_ptr = libpointer(obj.int_ptr_class,obj.nstop);
     end
 
@@ -795,10 +783,6 @@ classdef lusol_obj < handle
         obj.ipinv_ptr, ...
         obj.iqinv_ptr, ...
         w_ptr, ...
-        obj.a2_ptr, ...
-        obj.locc2_ptr, ...
-        obj.lenc2_ptr, ...
-        obj.indc2_ptr, ...
         ret_inform_ptr);
 
       % error checking
