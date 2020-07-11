@@ -98,12 +98,12 @@ contains
   ! 20 Jan 2016: Current version of lusol1.f90.
   !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-  subroutine lu1fac( m    , n    , nstop, nelem, lena , luparm, parmlu,       &
+  subroutine lu1fac( m    , n    , nelem, lena , luparm, parmlu,       &
                      a    , indc , indr , p    , q     ,               &
                      lenc , lenr , locc , locr ,                       &
                      iploc, iqloc, ipinv, iqinv, w     , inform )
 
-    integer(ip),   intent(in)    :: m, n, nstop, nelem, lena
+    integer(ip),   intent(in)    :: m, n, nelem, lena
 
     integer(ip),   intent(inout) :: luparm(30)
     integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
@@ -580,7 +580,7 @@ contains
        lmaxr  = 1             ! Dummy
     end if
 
-    call lu1fad( m     , n     , nstop,  numnz , lena2 , luparm, parmlu,       &
+    call lu1fad( m     , n     , numnz , lena2 , luparm, parmlu,       &
                  a     , indc  , indr  , p     , q     ,               &
                  lenc  , lenr  , locc  , locr  ,                       &
                  iploc , iqloc , ipinv , iqinv , w     ,               &
@@ -845,7 +845,7 @@ contains
 
   !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-  subroutine lu1fad( m     , n     , nstop, nelem , lena  , luparm, parmlu,   &
+  subroutine lu1fad( m     , n     , nelem , lena  , luparm, parmlu,   &
                      a     , indc  , indr  , p     , q     ,           &
                      lenc  , lenr  , locc  , locr  ,                   &
                      iploc , iqloc , ipinv , iqinv , w     ,           &
@@ -854,7 +854,7 @@ contains
                      nUtri , nLtri , ndens1, ndens2, nrank , nslack,   &
                      Lmax  , Umax  , DUmax , DUmin , Akmax )
 
-    integer(ip),   intent(in)    :: m, n, nstop, nelem, lena, lenH, nslack
+    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH, nslack
     integer(ip),   intent(inout) :: luparm(30)
     real(rp),      intent(inout) :: parmlu(30), a(lena), Amaxr(m),     &
                                     w(n), Ha(lenH)
@@ -1095,7 +1095,6 @@ contains
     lrow   = nelem
     lcol   = nelem
     minmn  = min( m, n )
-    minmn  = min( minmn, nstop)
     maxmn  = max( m, n )
     nzleft = nelem
     nspare = 1

@@ -62,7 +62,7 @@ classdef lusol_obj < handle
   %  lusol_obj.r1mod
   %
 
-  properties (Access=public)
+  properties (Access=private)
 
     % object parameters
 
@@ -81,8 +81,7 @@ classdef lusol_obj < handle
     Uspace = 0; % (3.0)
     dens1 = 0; % (0.3)
     dens2 = 0; % (0.5)
-    nstop = 0; 
-    
+
     % lusol parameter vectors
 
     luparm_ptr = 0; % vector of integer parameters (input and output)
@@ -92,7 +91,7 @@ classdef lusol_obj < handle
 
     m_ptr = 0; % number of rows
     n_ptr = 0; % number of columns
-    nstop_ptr = 0; 
+
     nelem_ptr = 0; % number of elements in original matrix
     nzmax_ptr = 0; % maximum storage allocated
 
@@ -195,10 +194,7 @@ classdef lusol_obj < handle
       in_parse.addParamValue('Uspace',3.0,@(x) x>=0.0);
       in_parse.addParamValue('dens1',0.3,@(x) x>=0.0);
       in_parse.addParamValue('dens2',0.5,@(x) x>=0.0);
-      
-      % my additions
-      in_parse.addParamValue('nstop', 0, @(x) x>= 0); 
-      
+
       % parse the input
       in_parse.parse(varargin{:});
 
@@ -313,9 +309,7 @@ classdef lusol_obj < handle
       obj.Uspace = options.Uspace;
       obj.dens1 = options.dens1;
       obj.dens2 = options.dens2;
-      
-      obj.nstop = options.nstop; 
-      
+
       % set the pivoting strategy
       switch options.pivot
         case 'TPP'
@@ -377,13 +371,9 @@ classdef lusol_obj < handle
       % get information about A
       m = size(A,1);
       n = size(A,2);
-      
-      if obj.nstop == 0
-          obj.nstop = m;
-      end
       nelem = nnz(A);
       % set storage sizes
-      nzmax = max([2*nelem 10*m 10*n 10 obj.nzinit]);
+      nzmax = max([2*nelem 10*m 10*n 10000 obj.nzinit]);
       % vectors of length nzmax
       a = zeros(nzmax,1);
       indc = zeros(nzmax,1,obj.int_class);
@@ -429,8 +419,6 @@ classdef lusol_obj < handle
       obj.iploc_ptr = libpointer(obj.int_ptr_class,iploc);
       obj.iqinv_ptr = libpointer(obj.int_ptr_class,iqinv);
 
-      
-      obj.nstop_ptr = libpointer(obj.int_ptr_class,obj.nstop);
     end
 
     function update_check(obj)
@@ -750,8 +738,6 @@ classdef lusol_obj < handle
 
       % get matrix size
       [m n] = obj.size();
-      
-     
 
       % temporary storage
       %cols_ptr = libpointer(obj.int_ptr_class,zeros(n,1));
@@ -764,7 +750,6 @@ classdef lusol_obj < handle
       calllib('libclusol','clu1fac', ...
         obj.m_ptr, ...
         obj.n_ptr, ...
-		obj.nstop_ptr, ...
         obj.nelem_ptr, ...
         obj.nzmax_ptr, ...
         obj.luparm_ptr, ...
@@ -1156,7 +1141,7 @@ classdef lusol_obj < handle
       % read the triplet form from LUSOL data
       li(1:s.lenL0) = double(indc(lena-s.lenL0+1:lena));
       lj(1:s.lenL0) = double(indr(lena-s.lenL0+1:lena));
-      la(1:s.lenL0) = -double(a(lena-s.lenL0+1:lena))
+      la(1:s.lenL0) = -double(a(lena-s.lenL0+1:lena));
       % add 1's along the diagonal
       li(s.lenL0+1:end) = (1:m)';
       lj(s.lenL0+1:end) = (1:m)';

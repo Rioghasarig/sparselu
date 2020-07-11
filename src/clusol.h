@@ -6,7 +6,6 @@
 void clu1fac(
   int64_t* m,
   int64_t* n,
-  int64_t* nstop,
   int64_t* nelem,
   int64_t* lena,
   int64_t* luparm,
