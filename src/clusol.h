@@ -24,6 +24,16 @@ void clu1fac(
   int64_t* ipinv,
   int64_t* iqinv,
   double* w,
+  double* lua,
+  int64_t* luindc,
+  int64_t* luindr,
+  int64_t* lulenc,
+  int64_t* lulenr,
+  int64_t* lulocc,
+  int64_t* lulocr,
+  int64_t* luiqloc,
+  int64_t* iwc,
+  int64_t* iwr, 
   int64_t* inform);
 
 void clu6sol(

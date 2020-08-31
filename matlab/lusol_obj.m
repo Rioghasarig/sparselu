@@ -62,7 +62,7 @@ classdef lusol_obj < handle
   %  lusol_obj.r1mod
   %
 
-  properties (Access=private)
+  properties (Access=public)
 
     % object parameters
 
@@ -100,13 +100,21 @@ classdef lusol_obj < handle
     a_ptr = 0; % main storage array
     indc_ptr = 0; % row indices
     indr_ptr = 0; % column indices
-
+    
+    lua_ptr = 0;
+    luindc_ptr = 0;
+    luindr_ptr = 0; 
     % vectors of length m
 
     p_ptr = 0; % row permutation
     lenr_ptr = 0;
     locr_ptr = 0;
+    lulenr_ptr = 0;
+    lulocr_ptr = 0;
+
     iqloc_ptr = 0;
+    luiqloc_ptr = 0;
+
     ipinv_ptr = 0;
 
     % vectors of length n
@@ -114,11 +122,15 @@ classdef lusol_obj < handle
     q_ptr = 0; % column permutation
     lenc_ptr = 0;
     locc_ptr = 0;
+
+    lulenc_ptr = 0;
+    lulocc_ptr = 0; 
     iploc_ptr = 0;
     iqinv_ptr = 0;
 
     % other
-
+    iwc_ptr = 0;
+    iwr_ptr = 0;
     depcol_lx = 0; % logical index indicating dependent columns
     int_class = 'int64'; % integer class used for integer arrays
     int_ptr_class = 'int64Ptr'; % integer class for libpointers
@@ -346,7 +358,9 @@ classdef lusol_obj < handle
       luparm(3) = cast(obj.maxcol,obj.int_class);
       luparm(6) = cast(obj.pivot,obj.int_class);
       luparm(8) = cast(obj.keepLU,obj.int_class);
-      parmlu(1) = double(obj.Ltol1);
+      luparm(9) = cast(1,obj.int_class); 
+
+	  parmlu(1) = double(obj.Ltol1);
       parmlu(2) = double(obj.Ltol2);
       parmlu(3) = double(obj.small);
       parmlu(4) = double(obj.Utol1);
@@ -354,7 +368,7 @@ classdef lusol_obj < handle
       parmlu(6) = double(obj.Uspace);
       parmlu(7) = double(obj.dens1);
       parmlu(8) = double(obj.dens2);
-
+    
       % allocate and initialize pointers
       obj.luparm_ptr = libpointer(obj.int_ptr_class,luparm);
       obj.parmlu_ptr = libpointer('doublePtr',parmlu);
@@ -378,6 +392,11 @@ classdef lusol_obj < handle
       a = zeros(nzmax,1);
       indc = zeros(nzmax,1,obj.int_class);
       indr = zeros(nzmax,1,obj.int_class);
+
+	  lua = zeros(nzmax,1);
+	  luindc = zeros(nzmax,1,obj.int_class);
+	  luindr = zeros(nzmax,1,obj.int_class);
+       
       % extract data from A for use in LUSOL
       [indc_tmp indr_tmp a_tmp] = find(A);
       indc(1:nelem) = cast(indc_tmp,obj.int_class);
@@ -385,17 +404,29 @@ classdef lusol_obj < handle
       a(1:nelem) = a_tmp;
       % vectors of length m
       p = zeros(m,1);
+      
       lenr = zeros(m,1);
       locr = zeros(m,1);
       iqloc = zeros(m,1);
+
+      lulenr = zeros(m,1);
+      lulocr = zeros(m,1);
+      luiqloc = zeros(m,1); 
+
       ipinv = zeros(m,1);
+      iwr = zeros(m,1);
       % vectors of length n
       q = zeros(n,1);
+      
       lenc = zeros(n,1);
       locc = zeros(n,1);
       iploc = zeros(n,1);
-      iqinv = zeros(n,1);
+      
+      lulocc = zeros(n,1);
+      lulenc = zeros(n,1);
 
+      iqinv = zeros(n,1);
+      iwc = zeros(n,1); 
       %-- allocate and initialize libpointer "arrays" --%
       % integer scalars
       obj.m_ptr = libpointer(obj.int_ptr_class,m);
@@ -406,18 +437,35 @@ classdef lusol_obj < handle
       obj.a_ptr = libpointer('doublePtr',a);
       obj.indc_ptr = libpointer(obj.int_ptr_class,indc);
       obj.indr_ptr = libpointer(obj.int_ptr_class,indr);
-      % vectors of length m
+      
+	  obj.lua_ptr = libpointer('doublePtr',lua);
+	  obj.luindc_ptr = libpointer(obj.int_ptr_class,luindc);
+	  obj.luindr_ptr  = libpointer(obj.int_ptr_class,luindr);
+	  % vectors of length m
       obj.p_ptr = libpointer(obj.int_ptr_class,p);
+      
       obj.lenr_ptr = libpointer(obj.int_ptr_class,lenr);
       obj.locr_ptr = libpointer(obj.int_ptr_class,locr);
       obj.iqloc_ptr = libpointer(obj.int_ptr_class,iqloc);
+
+      obj.lulenr_ptr = libpointer(obj.int_ptr_class,lulenr);
+      obj.lulocr_ptr = libpointer(obj.int_ptr_class,lulocr);
+      obj.luiqloc_ptr = libpointer(obj.int_ptr_class,luiqloc);
+
       obj.ipinv_ptr = libpointer(obj.int_ptr_class,ipinv);
+      obj.iwr_ptr = libpointer(obj.int_ptr_class, iwr);
       % vectors of length n
       obj.q_ptr = libpointer(obj.int_ptr_class,q);
+
       obj.lenc_ptr = libpointer(obj.int_ptr_class,lenc);
       obj.locc_ptr = libpointer(obj.int_ptr_class,locc);
       obj.iploc_ptr = libpointer(obj.int_ptr_class,iploc);
+      
+      obj.lulenc_ptr = libpointer(obj.int_ptr_class,lulenc);
+      obj.lulocc_ptr = libpointer(obj.int_ptr_class, lulocc);
+      
       obj.iqinv_ptr = libpointer(obj.int_ptr_class,iqinv);
+      obj.iwc_ptr = libpointer(obj.int_ptr_class, iwc);
 
     end
 
@@ -687,9 +735,8 @@ classdef lusol_obj < handle
       % See also: LUSOL_OBJ.FACTORIZE
       %
 
-      % load the shared library
-      obj.load_library;
 
+      obj.load_library;
       % factorize the matrix
       obj.factorize(A,varargin{:});
 
@@ -730,6 +777,7 @@ classdef lusol_obj < handle
       %
 
       % parse and set options
+
       obj.parse_options(varargin{:});
       obj.set_options();
 
@@ -768,6 +816,16 @@ classdef lusol_obj < handle
         obj.ipinv_ptr, ...
         obj.iqinv_ptr, ...
         w_ptr, ...
+        obj.lua_ptr, ...
+        obj.luindc_ptr, ...
+        obj.luindr_ptr, ...
+        obj.lulenc_ptr, ...
+        obj.lulenr_ptr, ...
+        obj.lulocc_ptr, ...
+        obj.lulocr_ptr, ...
+        obj.luiqloc_ptr, ...
+        obj.iwc_ptr, ...
+        obj.iwr_ptr, ...
         ret_inform_ptr);
 
       % error checking
@@ -833,7 +891,46 @@ classdef lusol_obj < handle
       end
 
     end
+    
+    function cfactorize(obj)
+      [m,n] = obj.size();
+      w_ptr = libpointer('doublePtr',zeros(n,1));
 
+      % run lusol
+      ret_inform_ptr = libpointer(obj.int_ptr_class,0);
+      calllib('libclusol','clu1fac', ...
+        obj.m_ptr, ...
+        obj.n_ptr, ...
+        obj.nelem_ptr, ...
+        obj.nzmax_ptr, ...
+        obj.luparm_ptr, ...
+        obj.parmlu_ptr, ...
+        obj.a_ptr, ...
+        obj.indc_ptr, ...
+        obj.indr_ptr, ...
+        obj.p_ptr, ...
+        obj.q_ptr, ...
+        obj.lenc_ptr, ...
+        obj.lenr_ptr, ...
+        obj.locc_ptr, ...
+        obj.locr_ptr, ...
+        obj.iploc_ptr, ...
+        obj.iqloc_ptr, ...
+        obj.ipinv_ptr, ...
+        obj.iqinv_ptr, ...
+        w_ptr, ...
+        obj.lua_ptr, ...
+        obj.luindc_ptr, ...
+        obj.luindr_ptr, ...
+        obj.lulenc_ptr, ...
+        obj.lulenr_ptr, ...
+        obj.lulocc_ptr, ...
+        obj.lulocr_ptr, ...
+        obj.luiqloc_ptr, ...
+        obj.iwc_ptr, ...
+        obj.iwr_ptr, ...
+        ret_inform_ptr);
+    end 
     % methods to collect information about matrix and factorization
 
     function [m n] = size(obj)
@@ -1034,14 +1131,14 @@ classdef lusol_obj < handle
       q = obj.q();
       s = obj.stats();
       % initialize arrays for U triplets
-      ui = zeros(s.lenU-s.nsing,1,'double');
-      uj = zeros(s.lenU-s.nsing,1,'double');
-      ua = zeros(s.lenU-s.nsing,1,'double');
+      ui = zeros(s.lenU0,1,'double');
+      uj = zeros(s.lenU0,1,'double');
+      ua = zeros(s.lenU0,1,'double');
       % obtain required matrix data
-      a = obj.a_ptr.Value;
-      lenr = obj.lenr_ptr.Value;
-      locr = obj.locr_ptr.Value;
-      indr = obj.indr_ptr.Value;
+      a = obj.lua_ptr.Value;
+      lenr = obj.lulenr_ptr.Value;
+      locr = obj.lulocr_ptr.Value;
+      indr = obj.luindr_ptr.Value;
       % array position pointers
       k1 = 1;
       k2 = 1;
@@ -1131,9 +1228,9 @@ classdef lusol_obj < handle
       s = obj.stats();
       lena = double(obj.nzmax_ptr.Value);
       % get matrix data
-      a = obj.a_ptr.Value;
-      indc = obj.indc_ptr.Value;
-      indr = obj.indr_ptr.Value;
+      a = obj.lua_ptr.Value;
+      indc = obj.luindc_ptr.Value;
+      indr = obj.luindr_ptr.Value;
       % allocate arrays for triplet form
       li = zeros(s.lenL0+m,1);
       lj = zeros(s.lenL0+m,1);
