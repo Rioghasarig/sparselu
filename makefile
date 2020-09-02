@@ -19,7 +19,7 @@ else
 endif
 
 # Fortran optimization level
-FOPT := -O3
+FOPT := -O0
 
 # Fortran compilers
 ifneq ($(DARWIN),)
@@ -32,7 +32,7 @@ ifneq ($(DARWIN),)
 else
   # Fortran 90 compiler
   F90C := gfortran
-  F90FLAGS :=  -m64 -fPIC -Jsrc $(FOPT)
+  F90FLAGS :=  -m64 -fPIC -Jsrc -g $(FOPT)
   # Fortran 77 compiler
   F77C := gfortran
   F77FLAGS := -m64 -fPIC -fdefault-integer-8 $(FOPT)
