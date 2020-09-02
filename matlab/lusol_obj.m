@@ -1078,7 +1078,13 @@ classdef lusol_obj < handle
     end
 
     % methods to get the matrix factors
-
+    function [L U p q] = lupq(obj)
+      [m n] = obj.size();
+      L = full(obj.mulL(eye(m)));
+      U = full(obj.U());
+      p = obj.p;
+      q = obj.q; 
+    end
     function [U p q] = U(obj,pm_opt)
       %U  get the upper triangular factor U
       %
