@@ -482,8 +482,6 @@ contains
     inform = 0
     minlen = nelem + 2*(m + n)
     numl0  = 0
-    oldlenL = luparm(21)
-    oldlenU = luparm(22)
     lenL   = 0
     lenU   = 0
     lrow   = 0
@@ -628,8 +626,8 @@ contains
        !
        ! Also, set  numl0 = the number of nonempty columns of L.
        !---------------------------------------------------------------
-       lu     = oldlenU
-       ll     = lena -oldlenL + 1
+       lu     = luparm(24)
+       ll     = lena -luparm(23) + 1
        lm     = lena2 + 1
        lrow   = lenU
 
@@ -748,10 +746,11 @@ contains
     luparm(17) = ndens1
     luparm(18) = ndens2
     luparm(19) = jumin
-    luparm(20) = luparm(20) + numl0
-    luparm(21) = luparm(21) + lenL
-    luparm(22) = luparm(22) + lenU
-    luparm(23) = lenL
+    luparm(20) = 0
+    luparm(21) = 0
+    
+    luparm(23) = luparm(23) + lenL
+    luparm(24) = luparm(24) + lenU
     luparm(27) = mersum
     luparm(28) = ilast
     luparm(29) = jlast
@@ -1084,7 +1083,7 @@ contains
         lrow   = nelem
         lcol   = nelem
     else
-        lcol = luparm(24)
+        lcol = luparm(22)
         lrow = luparm(25)
         lfile = lcol
     end if
@@ -1866,7 +1865,7 @@ contains
           lcol = locc(jbest)
        end if
 800 end do
-    luparm(24) = lcol
+    luparm(22) = lcol
     luparm(25) = lrow
     !------------------------------------------------------------------
     ! End of main loop.
