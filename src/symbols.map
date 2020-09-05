@@ -1,6 +1,6 @@
 {
   global:
-    clu1fac;
+    clu1setup;
     clu6mul;
     clu6sol;
     clu8adc;

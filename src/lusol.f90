@@ -55,7 +55,7 @@ module lusol
 
   implicit none
   private
-  public    :: lu1fac, lu6sol, lu8rpc
+  public    :: lu1setup,lu1pfac, lu6sol, lu8rpc
   private   :: jdamax
   intrinsic :: abs, int, max, min, real
 
@@ -97,8 +97,9 @@ contains
   !              lu1mxc fixed.  TRP and TCP ok now on TRO11X3.
   ! 20 Jan 2016: Current version of lusol1.f90.
   !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  !
 
-  subroutine lu1fac( m      , n    , nelem  , lena  , luparm, parmlu,       &
+  subroutine lu1setup( m      , n    , nelem  , lena  , luparm, parmlu,       &
                      a      , indc , indr   , p     , q     ,               &
                      lenc   , lenr , locc   , locr  ,                       &
                      iploc  , iqloc, ipinv  , iqinv , w     ,               &
@@ -122,323 +123,6 @@ contains
 
     integer(ip),   intent(out)   :: inform
 
-    !------------------------------------------------------------------
-    ! lu1fac computes a factorization A = L*U, where A is a sparse
-    ! matrix with m rows and n columns, P*L*P' is lower triangular
-    ! and P*U*Q is upper triangular for certain permutations P, Q
-    ! (which are returned in the arrays p, q).
-    ! Stability is ensured by limiting the size of the elements of L.
-    !
-    ! The nonzeros of A are input via the parallel arrays a, indc, indr,
-    ! which should contain nelem entries of the form    aij,    i,    j
-    ! in any order.  There should be no duplicate pairs         i,    j.
-    !
-    ! ******************************************************************
-    ! *        Beware !!!   The row indices i must be in indc,         *
-    ! *              and the column indices j must be in indr.         *
-    ! *              (Not the other way round!)                        *
-    ! ******************************************************************
-    !
-    ! It does not matter if some of the entries in a(*) are zero.
-    ! Entries satisfying  abs( a(i) ) .le. parmlu(3)  are ignored.
-    ! Other parameters in luparm and parmlu are described below.
-    !
-    ! The matrix A may be singular.  On exit, nsing = luparm(11) gives
-    ! the number of apparent singularities.  This is the number of
-    ! "small" diagonals of the permuted factor U, as judged by
-    ! the input tolerances Utol1 = parmlu(4) and  Utol2 = parmlu(5).
-    ! The diagonal element diagj associated with column j of A is
-    ! "small" if
-    !                 abs( diagj ) .le. Utol1
-    ! or
-    !                 abs( diagj ) .le. Utol2 * max( uj ),
-    !
-    ! where max( uj ) is the maximum element in the j-th column of U.
-    ! The position of such elements is returned in w(*).  In general,
-    ! w(j) = + max( uj ),  but if column j is a singularity,
-    ! w(j) = - max( uj ).  Thus, w(j) .le. 0 if column j appears to be
-    ! dependent on the other columns of A.
-    !
-    ! NOTE: lu1fac (like certain other sparse LU packages) does not
-    ! treat dense columns efficiently.  This means it will be slow
-    ! on "arrow matrices" of the form
-    !                  A = (x       a)
-    !                      (  x     b)
-    !                      (    x   c)
-    !                      (      x d)
-    !                      (x x x x e)
-    ! if the numerical values in the dense column allow it to be
-    ! chosen LATE in the pivot order.
-    !
-    ! With TPP (Threshold Partial Pivoting), the dense column is
-    ! likely to be chosen late.
-    !
-    ! With TCP (Threshold Complete Pivoting), if any of a,b,c,d
-    ! is significantly larger than other elements of A, it will
-    ! be chosen as the first pivot and the dense column will be
-    ! eliminated, giving reasonably sparse factors.
-    ! However, if element e is so big that TCP chooses it, the factors
-    ! will become dense.  (It's hard to win on these examples!)
-    !==================================================================
-    !
-    !
-    ! Notes on the array names
-    ! ------------------------
-    !
-    ! During the LU factorization, the sparsity pattern of the matrix
-    ! being factored is stored twice: in a column list and a row list.
-    !
-    ! The column list is ( a, indc, locc, lenc )
-    ! where
-    !       a(*)    holds the nonzeros,
-    !       indc(*) holds the indices for the column list,
-    !       locc(j) points to the start of column j in a(*) and indc(*),
-    !       lenc(j) is the number of nonzeros in column j.
-    !
-    ! The row list is    (    indr, locr, lenr )
-    ! where
-    !       indr(*) holds the indices for the row list,
-    !       locr(i) points to the start of row i in indr(*),
-    !       lenr(i) is the number of nonzeros in row i.
-    !
-    !
-    ! At all stages of the LU factorization, p contains a complete
-    ! row permutation.  At the start of stage k,  p(1), ..., p(k-1)
-    ! are the first k-1 rows of the final row permutation P.
-    ! The remaining rows are stored in an ordered list
-    !                    ( p, iploc, ipinv )
-    ! where
-    !       iploc(nz) points to the start in p(*) of the set of rows
-    !                 that currently contain nz nonzeros,
-    !       ipinv(i)  points to the position of row i in p(*).
-    !
-    ! For example,
-    !       iploc(1) = k   (and this is where rows of length 1 begin),
-    !       iploc(2) = k+p  if there are p rows of length 1
-    !                      (and this is where rows of length 2 begin).
-    !
-    ! Similarly for q, iqloc, iqinv.
-    !==================================================================
-    !
-    !
-    ! 00 Jun 1983  Original version.
-    ! 00 Jul 1987  nrank  saved in luparm(16).
-    ! 12 Apr 1989  ipinv, iqinv added as workspace.
-    ! 26 Apr 1989  maxtie replaced by maxcol in Markowitz search.
-    ! 16 Mar 1992  jumin  saved in luparm(19).
-    ! 10 Jun 1992  lu1fad has to move empty rows and cols to the bottom
-    !              (via lu1pq3) before doing the dense LU.
-    ! 12 Jun 1992  Deleted dense LU (lu1ful, lu1vlu).
-    ! 25 Oct 1993  keepLU implemented.
-    ! 07 Feb 1994  Added new dense LU (lu1ful, lu1den).
-    ! 21 Dec 1994  Bugs fixed in lu1fad (nrank) and lu1ful (ipvt).
-    ! 08 Aug 1995  Use p instead of w as parameter to lu1or3 (for F90).
-    ! 13 Sep 2000  TPP and TCP options implemented.
-    ! 17 Oct 2000  Fixed troubles due to A = empty matrix (Todd Munson).
-    ! 01 Dec 2000  Save Lmax, Umax, etc. after both lu1fad and lu6chk.
-    !              lu1fad sets them when keepLU = false.
-    !              lu6chk sets them otherwise, and includes items
-    !              from the dense LU.
-    ! 11 Mar 2001  lu6chk now looks at diag(U) when keepLU = false.
-    ! 26 Apr 2002  New TCP implementation using heap routines to
-    !              store largest element in each column.
-    !              New workspace arrays Ha, Hj, Hk required.
-    !              For compatibility, borrow space from a, indc, indr
-    !              rather than adding new input parameters.
-    ! 01 May 2002  lu1den changed to lu1DPP (dense partial  pivoting).
-    !              lu1DCP implemented       (dense complete pivoting).
-    !              Both TPP and TCP now switch to dense mode and end.
-    !
-    ! 10 Jan 2010: First f90 version.
-    !---------------------------------------------------------------------
-    !
-    !
-    !  INPUT PARAMETERS
-    !
-    !  m      (not altered) is the number of rows in A.
-    !  n      (not altered) is the number of columns in A.
-    !  nelem  (not altered) is the number of matrix entries given in
-    !         the arrays a, indc, indr.
-    !  lena   (not altered) is the dimension of  a, indc, indr.
-    !         This should be significantly larger than nelem.
-    !         Typically one should have
-    !            lena > max( 2*nelem, 10*m, 10*n, 10000 )
-    !         but some applications may need more.
-    !         On machines with virtual memory it is safe to have
-    !         lena "far bigger than necessary", since not all of the
-    !         arrays will be used.
-    !  a      (overwritten) contains entries   Aij  in   a(1:nelem).
-    !  indc   (overwritten) contains the indices i in indc(1:nelem).
-    !  indr   (overwritten) contains the indices j in indr(1:nelem).
-    !
-    !  luparm input parameters:                                Typical value
-    !
-    !  luparm( 1) = nout     File number for printed messages.         6
-    !
-    !  luparm( 2) = lprint   Print level.                              0
-    !                   <  0 suppresses output.
-    !                   =  0 gives error messages.
-    !                  >= 10 gives statistics about the LU factors.
-    !                  >= 50 gives debug output from lu1fac
-    !                        (the pivot row and column and the
-    !                        no. of rows and columns involved at
-    !                        each elimination step).
-    !
-    !  luparm( 3) = maxcol   lu1fac: maximum number of columns         5
-    !                        searched allowed in a Markowitz-type
-    !                        search for the next pivot element.
-    !                        For some of the factorization, the
-    !                        number of rows searched is
-    !                        maxrow = maxcol - 1.
-    !
-    !  luparm( 6) = 0    =>  TPP: Threshold Partial   Pivoting.        0
-    !             = 1    =>  TRP: Threshold Rook      Pivoting.
-    !             = 2    =>  TCP: Threshold Complete  Pivoting.
-    !             = 3    =>  TSP: Threshold Symmetric Pivoting.
-    !             = 4    =>  TDP: Threshold Diagonal  Pivoting.
-    !                             (TDP not yet implemented).
-    !                        TRP and TCP are more expensive than TPP but
-    !                        more stable and better at revealing rank.
-    !                        Take care with setting parmlu(1), especially
-    !                        with TCP.
-    !                        NOTE: TSP and TDP are for symmetric matrices
-    !                        that are either definite or quasi-definite.
-    !                        TSP is effectively TRP for symmetric matrices.
-    !                        TDP is effectively TCP for symmetric matrices.
-    !
-    !  luparm( 8) = keepLU   lu1fac: keepLU = 1 means the numerical    1
-    !                        factors will be computed if possible.
-    !                        keepLU = 0 means L and U will be discarded
-    !                        but other information such as the row and
-    !                        column permutations will be returned.
-    !                        The latter option requires less storage.
-    !
-    !  parmlu input parameters:                                Typical value
-    !
-    !  parmlu( 1) = Ltol1    Max Lij allowed during Factor.
-    !                                                  TPP     10.0 or 100.0
-    !                                                  TRP      4.0 or  10.0
-    !                                                  TCP      5.0 or  10.0
-    !                                                  TSP      4.0 or  10.0
-    !                        With TRP and TCP (Rook and Complete Pivoting),
-    !                        values less than 25.0 may be expensive
-    !                        on badly scaled data.  However,
-    !                        values less than 10.0 may be needed
-    !                        to obtain a reliable rank-revealing
-    !                        factorization.
-    !  parmlu( 2) = Ltol2    Max Lij allowed during Updates.            10.0
-    !                        during updates.
-    !  parmlu( 3) = small    Absolute tolerance for       eps**0.8 = 3.0d-13
-    !                        treating reals as zero.
-    !  parmlu( 4) = Utol1    Absolute tol for flagging    eps**0.67= 3.7d-11
-    !                        small diagonals of U.
-    !  parmlu( 5) = Utol2    Relative tol for flagging    eps**0.67= 3.7d-11
-    !                        small diagonals of U.
-    !                        (eps = machine precision)
-    !  parmlu( 6) = Uspace   Factor limiting waste space in  U.      3.0
-    !                        In lu1fac, the row or column lists
-    !                        are compressed if their length
-    !                        exceeds Uspace times the length of
-    !                        either file after the last compression.
-    !  parmlu( 7) = dens1    The density at which the Markowitz      0.3
-    !                        pivot strategy should search maxcol
-    !                        columns and no rows.
-    !                        (Use 0.3 unless you are experimenting
-    !                        with the pivot strategy.)
-    !  parmlu( 8) = dens2    the density at which the Markowitz      0.5
-    !                        strategy should search only 1 column,
-    !                        or (if storage is available)
-    !                        the density at which all remaining
-    !                        rows and columns will be processed
-    !                        by a dense LU code.
-    !                        For example, if dens2 = 0.1 and lena is
-    !                        large enough, a dense LU will be used
-    !                        once more than 10 per cent of the
-    !                        remaining matrix is nonzero.
-    !  
-    !
-    !  OUTPUT PARAMETERS
-    !
-    !  a, indc, indr     contain the nonzero entries in the LU factors of A.
-    !         If keepLU = 1, they are in a form suitable for use
-    !         by other parts of the LUSOL package, such as lu6sol.
-    !         U is stored by rows at the start of a, indr.
-    !         L is stored by cols at the end   of a, indc.
-    !         If keepLU = 0, only the diagonals of U are stored, at the
-    !         end of a.
-    !  p, q   are the row and column permutations defining the
-    !         pivot order.  For example, row p(1) and column q(1)
-    !         defines the first diagonal of U.
-    !  lenc(1:numl0) contains the number of entries in nontrivial
-    !         columns of L (in pivot order).
-    !  lenr(1:m) contains the number of entries in each row of U
-    !         (in original order).
-    !  locc(1:n) = 0 (ready for the LU update routines).
-    !  locr(1:m) points to the beginning of the rows of U in a, indr.
-    !  iploc, iqloc, ipinv, iqinv  are undefined.
-    !  w      indicates singularity as described above.
-    !  inform = 0 if the LU factors were obtained successfully.
-    !         = 1 if U appears to be singular, as judged by lu6chk.
-    !         = 3 if some index pair indc(l), indr(l) lies outside
-    !             the matrix dimensions 1:m , 1:n.
-    !         = 4 if some index pair indc(l), indr(l) duplicates
-    !             another such pair.
-    !         = 7 if the arrays a, indc, indr were not large enough.
-    !             Their length "lena" should be increase to at least
-    !             the value "minlen" given in luparm(13).
-    !         = 8 if there was some other fatal error.  (Shouldn't happen!)
-    !         = 9 if no diagonal pivot could be found with TSP or TDP.
-    !             The matrix must not be sufficiently definite
-    !             or quasi-definite.
-    !         =10 if there was some other fatal error.
-    !
-    !  luparm output parameters:
-    !
-    !  luparm(10) = inform   Return code from last call to any LU routine.
-    !  luparm(11) = nsing    No. of singularities marked in the
-    !                        output array w(*).
-    !  luparm(12) = jsing    Column index of last singularity.
-    !  luparm(13) = minlen   Minimum recommended value for  lena.
-    !  luparm(14) = maxlen   ?
-    !  luparm(15) = nupdat   No. of updates performed by the lu8 routines.
-    !  luparm(16) = nrank    No. of nonempty rows of U.
-    !  luparm(17) = ndens1   No. of columns remaining when the density of
-    !                        the matrix being factorized reached dens1.
-    !  luparm(18) = ndens2   No. of columns remaining when the density of
-    !                        the matrix being factorized reached dens2.
-    !  luparm(19) = jumin    The column index associated with DUmin.
-    !  luparm(20) = numL0    No. of columns in initial  L.
-    !  luparm(21) = lenL0    Size of initial  L  (no. of nonzeros).
-    !  luparm(22) = lenU0    Size of initial  U.
-    !  luparm(23) = lenL     Size of current  L.
-    !  luparm(24) = lenU     Size of current  U.
-    !  luparm(25) = lrow     Length of row file.
-    !  luparm(26) = ncp      No. of compressions of LU data structures.
-    !  luparm(27) = mersum   lu1fac: sum of Markowitz merit counts.
-    !  luparm(28) = nUtri    lu1fac: triangular rows in U.
-    !  luparm(29) = nLtri    lu1fac: triangular rows in L.
-    !  luparm(30) = nslack   lu1fac: no. of unit vectors at start of U. (info only)
-    !
-    !
-    !
-    !  parmlu output parameters:
-    !
-    !  parmlu(10) = Amax     Maximum element in  A.
-    !  parmlu(11) = Lmax     Maximum multiplier in current  L.
-    !  parmlu(12) = Umax     Maximum element in current  U.
-    !  parmlu(13) = DUmax    Maximum diagonal in  U.
-    !  parmlu(14) = DUmin    Minimum diagonal in  U.
-    !  parmlu(15) = Akmax    Maximum element generated at any stage
-    !                        during TCP factorization.
-    !  parmlu(16) = growth   TPP: Umax/Amax    TRP, TCP, TSP: Akmax/Amax
-    !  parmlu(17) =
-    !  parmlu(18) =
-    !  parmlu(19) =
-    !  parmlu(20) = resid    lu6sol: residual after solve with U or U'.
-    !  ...
-    !  parmlu(30) =
-    !---------------------------------------------------------------------
-
     character(1)           :: mnkey
     character(2)           :: kPiv(0:3)
     integer(ip)            :: i, idummy, j, jsing, jumin,              &
@@ -447,10 +131,10 @@ contains
                               ll, llsave, lm, lmaxr, locH,             &
                               lprint, lPiv, lrow, ltopl,               &
                               lu, mersum, minlen, nbump,               &
-                              ncp, ndens1, ndens2,calli,               &
+                              ncp, ndens1, ndens2,               &
                               nLtri, nmove, nout, nrank,               &
-                              nsing, numl0, numnz, nslack, nUtri,      &
-                              oldlenL,oldlenU,oldnrank,ilast,jlast
+                              nsing, numl0, numnz, nslack, nUtri
+    
     logical                :: keepLU, TCP, TPP, TRP, TSP
     real(rp)               :: Agrwth, Akmax, Amax, avgmer,             &
                               condU, delem, densty, dincr,             &
@@ -464,7 +148,6 @@ contains
     lprint = luparm(2)
     lPiv   = luparm(6)
     keepLU = luparm(8) /= 0
-    calli  = luparm(9)
     Ltol   = parmlu(1)  ! Limit on size of Lij
     small  = parmlu(3)  ! Drop tolerance
 
@@ -490,13 +173,12 @@ contains
     nLtri  = 0
     ndens1 = 0
     ndens2 = 0
-    oldnrank = luparm(16);
     nrank  = 0
     nsing  = 0
     jsing  = 0
     jumin  = 0
     nslack = 0
-
+    luparm(30) = nslack
     Amax   = zero
     Lmax   = zero
     Umax   = zero
@@ -521,8 +203,7 @@ contains
     ! Initialize workspace parameters.
 
     luparm(26) = 0             ! ncp
-    if (lena < minlen) go to 970
-    if (calli > 1 ) go to 929
+ 
     !-------------------------------------------------------------------
     ! Organize the  aij's  in  a, indc, indr.
     ! lu1or1  deletes small entries, tests for illegal  i,j's,
@@ -536,11 +217,6 @@ contains
                  a   , indc , indr , lenc , lenr,                      &
                  Amax, numnz, lerr , inform )
 
-    if (nout > 0  .and.  lprint >= 10) then
-       densty = 100.0_rp * delem / (dm * dn)
-       write(nout, 1000) m, mnkey, n, numnz, Amax, densty
-    end if
-    if (inform /= 0) go to 930
 
 !!! nelem  = numnz     !!! Don't change nelem.
 !!! nelem is now numnz below (it might be less than the input value).
@@ -548,7 +224,6 @@ contains
     call lu1or2( n, numnz, lena, a, indc, indr, lenc, locc )
     call lu1or3( m, n, lena, indc, lenc, locc, p, lerr, inform )
 
-    if (inform /= 0) go to 940
 
     call lu1or4( m, n, numnz, lena, indc, indr, lenc, lenr, locc, locr )
 
@@ -561,288 +236,24 @@ contains
     call lu1pq1( m, n, lenr, p, iploc, ipinv, indc(numnz + 1) )
     call lu1pq1( n, m, lenc, q, iqloc, iqinv, indc(numnz + 1) )
     call lu1slk( m, n, lena, q, iqloc, a, indc, locc, nslack, w )
-    luparm(30) = nslack
 
-    !------------------------------------------------------------------
-    ! For TCP, allocate Ha, Hj, Hk at the end of a, indc, indr.
-    ! Then compute the factorization  A = L*U.
-    !------------------------------------------------------------------
-929 lenH   = 0                ! Keep -Wmaybe-uninitialized happy.
-    lena2  = 0                !
-    locH   = 0                !
-    lmaxr  = 0                !
-    if (TPP .or. TSP) then
-       lenH   = 1
-       lena2  = lena
-       locH   = lena
-       lmaxr  = 1
-    else if (TRP) then
-       lenH   = 1             ! Dummy
-       lena2  = lena  - m     ! Reduced length of      a
-       locH   = lena          ! Dummy
-       lmaxr  = lena2 + 1     ! Start of Amaxr      in a
-    else if (TCP) then
-       lenH   = n             ! Length of heap
-       lena2  = lena  - lenH  ! Reduced length of      a, indc, indr
-       locH   = lena2 + 1     ! Start of Ha, Hj, Hk in a, indc, indr
-       lmaxr  = 1             ! Dummy
-    end if
-    
-    if (calli == 1) then
-        ilast = m
-        jlast = n
-    else
-        ilast = luparm(28)
-        jlast = luparm(29)
-    end if 
 
-    call lu1fad( m     , n     , numnz , lena2 , luparm, parmlu,       &
-                 a     , indc  , indr  , p     , q     ,               &
-                 lenc  , lenr  , locc  , locr  ,                       &
-                 iploc , iqloc , ipinv , iqinv , w     ,               &
-                 lenH  ,a(locH), indc(locH), indr(locH), a(lmaxr),     &
-                 inform, lenL  , lenU  , minlen, mersum,               &
-                 nUtri , nLtri , ndens1, ndens2, nrank , nslack,       &
-                 Lmax  , Umax  , DUmax , DUmin , Akmax, iwc ,iwr,      &
-                 ilast, jlast)
+    luparm(9) = m
+    luparm(10) = n
+    luparm(22) = nelem
+    luparm(25) = nelem
+890 return
 
-    
-    if (inform == 7) go to 970
-    if (inform == 9) go to 985
-    if (inform ==10) go to 981
-    if (inform >  0) go to 980
+  end subroutine lu1setup
 
-    if ( keepLU ) then
-       !---------------------------------------------------------------
-       ! The LU factors are at the top of  a, indc, indr,
-       ! with the columns of  L  and the rows of  U  in the order
-       !
-       ! ( free )   ... ( u3 ) ( l3 ) ( u2 ) ( l2 ) ( u1 ) ( l1 ).
-       !
-       ! Starting with ( l1 ) and ( u1 ), move the rows of  U  to the
-       ! left and the columns of  L  to the right, giving
-       !
-       ! ( u1 ) ( u2 ) ( u3 ) ...   ( free )   ... ( l3 ) ( l2 ) ( l1 ).
-       !
-       ! Also, set  numl0 = the number of nonempty columns of L.
-       !---------------------------------------------------------------
-       lu     = luparm(24)
-       ll     = lena -luparm(23) + 1
-       lm     = lena2 + 1
-       lrow   = lenU
+  subroutine lu1pfac( &
+    m, n, nelem , lena, luparm, parmlu,             &
+    a, indc, indr, p, q,lenc,lenr,locc,locr,        & 
+    iploc , iqloc , ipinv , iqinv , w,              &
+    lenH  , Ha, Hj, Hk, Amaxr,    &
+    iwc,iwr)
 
-       do k = (oldnrank+1),(oldnrank+nrank)
-          i       =   p(k)
-          lenUk   = - lenr(i)
-          lulenr(i) =   lenUk
-          j       =   q(k)
-          lenLk   = - lenc(j) - 1
-          if (lenLk > 0) then
-             numl0        = numl0 + 1
-             luiqloc(numl0) = lenLk
-          end if
-
-          do idummy = 1, lenLk
-            ll       = ll - 1
-            lm       = lm - 1
-            lua(ll)    = a(lm)
-            luindc(ll) = indc(lm)
-            luindr(ll) = indr(lm)
-          end do
-
-          lulocr(i) = lu + 1
-          l2      = lm - 1
-          lm      = lm - lenUk
-
-          do l = lm, l2
-             lu       = lu + 1
-             lua(lu)    = a(l)
-             luindr(lu) = indr(l)
-          end do
-       end do
-
-       !---------------------------------------------------------------
-       ! Save the lengths of the nonempty columns of  L,
-       ! and initialize  locc(j)  for the LU update routines.
-       !---------------------------------------------------------------
-       lulenc(1:numl0) = luiqloc(1:numl0)
-       lulocc(1:n)     = 0
-
-       !---------------------------------------------------------------
-       ! Test for singularity.
-       ! lu6chk  sets  nsing, jsing, jumin, Lmax, Umax, DUmax, DUmin
-       ! (including entries from the dense LU).
-       ! input      i1 = 1 means we're calling lu6chk from LUSOL.
-       ! output inform = 1 if there are singularities (nsing > 0).
-       ! 12 Dec 2015: nslack is now an input.
-       !---------------------------------------------------------------
-       call lu6chk( i1, m, n, nslack, w, lena, luparm, parmlu,         &
-                    lua, luindc, luindr, p, q,                               &
-                    lenc, lenr, locc, locr, inform )
-       nsing  = luparm(11)
-       jsing  = luparm(12)
-       jumin  = luparm(19)
-       Lmax   = parmlu(11)
-       Umax   = parmlu(12)
-       DUmax  = parmlu(13)
-       DUmin  = parmlu(14)
-
-    else
-       !---------------------------------------------------------------
-       ! keepLU = 0.  L and U were not kept, just the diagonals of U.
-       ! lu1fac will probably be called again soon with keepLU = .true.
-       ! 11 Mar 2001: lu6chk revised.  We can call it with keepLU = 0,
-       !              but we want to keep Lmax, Umax from lu1fad.
-       ! 05 May 2002: Allow for TCP with new lu1DCP.  Diag(U) starts
-       !              below lena2, not lena.  Need lena2 in next line.
-       ! 12 Dec 2015: nslack is now an input.
-       !---------------------------------------------------------------
-       call lu6chk( i1, m, n, nslack, w, lena2, luparm, parmlu,        &
-                    a, indc, indr, p, q,                               &
-                    lenc, lenr, locc, locr, inform )
-       nsing  = luparm(11)
-       jsing  = luparm(12)
-       jumin  = luparm(19)
-       DUmax  = parmlu(13)
-       DUmin  = parmlu(14)
-    end if
-
-    go to 990
-
-    !------------
-    ! Error exits.
-    !------------
-930 inform = 3
-    if (lprint >= 0) write(nout, 1300) lerr, indc(lerr), indr(lerr)
-    go to 990
-
-940 inform = 4
-    if (lprint >= 0) write(nout, 1400) lerr, indc(lerr), indr(lerr)
-    go to 990
-
-970 inform = 7
-    if (lprint >= 0) write(nout, 1700) lena, minlen
-    go to 990
-
-980 inform = 8
-    if (lprint >= 0) write(nout, 1800)
-    go to 990
-
-981 inform = 10
-    go to 990
-
-985 inform = 9
-    if (lprint >= 0) write(nout, 1900)
-
-    ! Store output parameters.
-
-990 luparm(9) = luparm(9) + 1 
-    luparm(10) = inform
-    luparm(11) = nsing
-    luparm(12) = jsing
-    luparm(13) = minlen
-    luparm(15) = 0
-    luparm(16) = luparm(16) + nrank
-    luparm(17) = ndens1
-    luparm(18) = ndens2
-    luparm(19) = jumin
-    luparm(20) = 0
-    luparm(21) = 0
-    
-    luparm(23) = luparm(23) + lenL
-    luparm(24) = luparm(24) + lenU
-    luparm(27) = mersum
-    luparm(28) = ilast
-    luparm(29) = jlast
-
-    parmlu(10) = Amax
-    parmlu(11) = Lmax
-    parmlu(12) = Umax
-    parmlu(13) = DUmax
-    parmlu(14) = DUmin
-    parmlu(15) = Akmax
-
-    Agrwth = Akmax  / (Amax + 1.0e-20_rp)
-    Ugrwth = Umax   / (Amax + 1.0e-20_rp)
-    if ( TPP ) then
-        growth = Ugrwth
-    else ! TRP or TCP or TSP
-        growth = Agrwth
-    end if
-    parmlu(16) = growth
-
-    !------------------------------------------------------------------
-    ! Print statistics for the LU factors.
-    !------------------------------------------------------------------
-    ncp    = luparm(26)
-    condU  = DUmax / max( DUmin, 1.0e-20_rp )
-    dincr  = lenL + lenU - nelem
-    dincr  = dincr * 100.0_rp / max( delem, one )
-    avgmer = mersum
-    avgmer = avgmer / dm
-    nbump  = m - nUtri - nLtri
-
-    if (nout > 0  .and.  lprint >= 10) then
-       if ( TPP ) then
-          write(nout, 1100) avgmer, lenL, lenL+lenU, ncp, dincr,       &
-                            nUtri, lenU, Ltol, Umax, Ugrwth,           &
-                            nLtri, ndens1, Lmax
-
-       else
-          write(nout, 1120) kPiv(lPiv), avgmer,                        &
-                            lenL, lenL+lenU, ncp, dincr,               &
-                            nUtri, lenU, Ltol, Umax, Ugrwth,           &
-                            nLtri, ndens1, Lmax, Akmax, Agrwth
-       end if
-
-       write(nout, 1200) nbump, ndens2, DUmax, DUmin, condU
-    end if
-
-    return
-
-1000 format(' m', i12, ' ', a, 'n', i12, '  Elems', i9,                &
-            '  Amax', es10.1, '  Density', f7.2)
-1100 format(' Merit', f8.1, '  lenL', i9, '  L+U', i11,                &
-            '  Cmpressns', i5, '  Incres', f8.2                        &
-      /     ' Utri', i9, '  lenU', i9, '  Ltol', es10.2,               &
-            '  Umax', es10.1, '  Ugrwth', es8.1                        &
-      /     ' Ltri', i9, '  dense1', i7, '  Lmax', es10.2)
-1120 format(' Mer', a2, f8.1, '  lenL', i9, '  L+U', i11,              &
-            '  Cmpressns', i5, '  Incres', f8.2                        &
-      /     ' Utri', i9, '  lenU', i9, '  Ltol', es10.2,               &
-            '  Umax', es10.1, '  Ugrwth', es8.1                        &
-      /     ' Ltri', i9, '  dense1', i7, '  Lmax', es10.2,             &
-            '  Akmax', es9.1, '  Agrwth', es8.1)
-1200 format(' bump', i9, '  dense2', i7, '  DUmax', es9.1,             &
-            '  DUmin', es9.1, '  condU', es9.1)
-1300 format(/ ' lu1fac  error...  entry  a(', i8, ')  has an illegal', &
-              ' row or column index'                                   &
-            //' indc, indr =', 2i8)
-1400 format(/ ' lu1fac  error...  entry  a(', i8, ')  has the same',   &
-              ' indices as an earlier entry'                           &
-            //' indc, indr =', 2i8)
-1700 format(/ ' lu1fac  error...  insufficient storage'                &
-            //' Increase  lena  from', i10, '  to at least', i10)
-1800 format(/ ' lu1fac  error...  fatal bug',                          &
-              '   (sorry --- this should never happen)')
-1900 format(/ ' lu1fac  error...  TSP used but',                       &
-              ' diagonal pivot could not be found')
-
-  end subroutine lu1fac
-
-  !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  subroutine lu1fad( m     , n     , nelem , lena  , luparm, parmlu,   &
-                     a     , indc  , indr  , p     , q     ,           &
-                     lenc  , lenr  , locc  , locr  ,                   &
-                     iploc , iqloc , ipinv , iqinv , w     ,           &
-                     lenH  , Ha    , Hj    , Hk    , Amaxr ,           &
-                     inform, lenL  , lenU  , minlen, mersum,           &
-                     nUtri , nLtri , ndens1, ndens2, nrank , nslack,   &
-                     Lmax  , Umax  , DUmax , DUmin , Akmax ,iwc,iwr,   &
-                     ilast , jlast)
-
-    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH, nslack
+    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH
     integer(ip),   intent(inout) :: luparm(30),ilast,jlast
     real(rp),      intent(inout) :: parmlu(30), a(lena), Amaxr(m),     &
                                     w(n), Ha(lenH)
@@ -853,200 +264,26 @@ contains
                                     iploc(n)  , iqloc(m)  ,            &
                                     ipinv(m), iqinv(n),                &
                                     Hj(lenH)  , Hk(lenH),               &
-                                    iwc(n), iwr(m)
-    integer(ip),   intent(out)   :: inform, lenL  , lenU  ,            &
+                                    iwc(n), iwr(m) 
+
+    integer(ip)                 :: inform, lenL  , lenU  , nslack      &
                                     minlen, mersum,     &
                                     nUtri , nLtri , ndens1, ndens2, nrank
-    real(rp),      intent(out)   :: Lmax, Umax, DUmax, DUmin, Akmax
+    real(rp)                    :: Lmax, Umax, DUmax, DUmin, Akmax
 
-    !------------------------------------------------------------------
-    ! lu1fad  is a driver for the numerical phase of lu1fac.
-    ! At each stage it computes a column of  L  and a row of  U,
-    ! using a Markowitz criterion to select the pivot element,
-    ! subject to a stability criterion that bounds the elements of  L.
-    !
-    ! 00 Jan 1986  Version documented in LUSOL paper:
-    !              Gill, Murray, Saunders and Wright (1987),
-    !              Maintaining LU factors of a general sparse matrix,
-    !              Linear algebra and its applications 88/89, 239-270.
-    !
-    ! 02 Feb 1989  Following Suhl and Aittoniemi (1987), the largest
-    !              element in each column is now kept at the start of
-    !              the column, i.e. in position locc(j) of a and indc.
-    !              This should speed up the Markowitz searches.
-    !              To save time on highly triangular matrices, we wait
-    !              until there are no further columns of length 1
-    !              before setting and maintaining that property.
-    !
-    ! 12 Apr 1989  ipinv and iqinv added (inverses of p and q)
-    !              to save searching p and q for rows and columns
-    !              altered in each elimination step.  (Used in lu1pq2)
-    !
-    ! 19 Apr 1989  Code segmented to reduce its size.
-    !              lu1gau does most of the Gaussian elimination work.
-    !              lu1mar does just the Markowitz search.
-    !              lu1mxc moves biggest elements to top of columns.
-    !              lu1pen deals with pending fill-in in the row list.
-    !              lu1pq2 updates the row and column permutations.
-    !
-    ! 26 Apr 1989  maxtie replaced by maxcol, maxrow in the Markowitz
-    !              search.  maxcol, maxrow change as density increases.
-    !
-    ! 25 Oct 1993  keepLU implemented.
-    !
-    ! 07 Feb 1994  Exit main loop early to finish off with a dense LU.
-    !              densLU tells lu1fad whether to do it.
-    ! 21 Dec 1994  Bug fixed.  nrank was wrong after the call to lu1ful.
-    ! 12 Nov 1999  A parallel version of dcopy gave trouble in lu1ful
-    !              during left-shift of dense matrix D within a(*).
-    !              Fixed this unexpected problem here in lu1fad
-    !              by making sure the first and second D don't overlap.
-    !
-    ! 13 Sep 2000  TCP (Threshold Complete Pivoting) implemented.
-    !              lu2max added
-    !              (finds aijmax from biggest elems in each col).
-    !              Utri, Ltri and Spars1 phases apply.
-    !              No switch to Dense CP yet.  (Only TPP switches.)
-    ! 14 Sep 2000  imax needed to remember row containing aijmax.
-    ! 22 Sep 2000  For simplicity, lu1mxc always fixes
-    !              all modified cols.
-    !              (TPP spars2 used to fix just the first maxcol cols.)
-    ! 08 Nov 2000: Speed up search for aijmax.
-    !              Don't need to search all columns if the elimination
-    !              didn't alter the col containing the current aijmax.
-    ! 21 Nov 2000: lu1slk implemented for Utri phase with TCP
-    !              to guard against deceptive triangular matrices.
-    !              (Utri used to have aijtol >= 0.9999 to include
-    !              slacks, but this allows other 1s to be accepted.)
-    !              Utri now accepts slacks, but applies normal aijtol
-    !              test to other pivots.
-    ! 28 Nov 2000: TCP with empty cols must call lu1mxc and lu2max
-    !              with ( lq1, n, ... ), not just ( 1, n, ... ).
-    ! 23 Mar 2001: lu1fad bug with TCP.
-    !              A col of length 1 might not be accepted as a pivot.
-    !              Later it appears in a pivot row and temporarily
-    !              has length 0 (when pivot row is removed
-    !              but before the column is filled in).  If it is the
-    !              last column in storage, the preceding col also thinks
-    !              it is "last".  Trouble arises when the preceding col
-    !              needs fill-in -- it overlaps the real "last" column.
-    !              (Very rarely, same trouble might have happened if
-    !              the drop tolerance caused columns to have length 0.)
-    !
-    !              Introduced ilast to record the last row in row file,
-    !                         jlast to record the last col in col file.
-    !              lu1rec returns ilast = indr(lrow + 1)
-    !                          or jlast = indc(lcol + 1).
-    !        ***   (Should be an output parameter, but didn't want to
-    !              alter lu1rec's parameter list.)
-    !              lu1rec also treats empty rows or cols safely.
-    !              (Doesn't eliminate them!)
-    !        ***   20 Dec 2015: Made ilast an output as it should be.
-    !
-    ! 26 Apr 2002: Heap routines added for TCP.
-    !              lu2max no longer needed.
-    !              imax, jmax used only for printing.
-    ! 01 May 2002: lu1DCP implemented (dense complete pivoting).
-    !              Both TPP and TCP now switch to dense LU
-    !              when density exceeds dens2.
-    ! 06 May 2002: In dense mode, store diag(U) in natural order.
-    ! 09 May 2002: lu1mCP implemented (Markowitz TCP via heap).
-    ! 11 Jun 2002: lu1mRP implemented (Markowitz TRP).
-    ! 28 Jun 2002: Fixed call to lu1mxr.
-    ! 14 Dec 2002: lu1mSP implemented (Markowitz TSP).
-    ! 15 Dec 2002: Both TPP and TSP can grab cols of length 1
-    !              during Utri.
-    ! 19 Dec 2004: Hdelete(...) has new input argument Hlenin.
-    ! 26 Mar 2006: lu1fad returns nrank  = min( mrank, nrank )
-    !              and ignores nsing from lu1ful
-    !
-    ! 10 Jan 2010: First f90 version.
-    ! 03 Apr 2013: lu1mxr recoded to improve efficiency of TRP.
-    ! 12 Dec 2015: nslack is now an input.
-    ! 20 Dec 2015: lu1rec returns ilast as output parameter.
-    !------------------------------------------------------------------
-
+ 
+ 
+ 
     logical                :: Utri, Ltri, spars1, spars2, dense,       &
                               densLU, keepLU, TCP, TPP, TRP, TSP
     real(rp)               :: abest, aijmax, aijtol, amax, &
                               dens1, dens2, diag,          &
                               Lij, Ltol, small, Uspace
 
-    !------------------------------------------------------------------
-    ! Local variables
-    !---------------
-    !
-    ! lcol   is the length of the column file.  It points to the last
-    !        nonzero in the column list.
-    ! lrow   is the analogous quantity for the row file.
-    ! lfile  is the file length (lcol or lrow) after the most recent
-    !        compression of the column list or row list.
-    ! nrowd  and  ncold  are the number of rows and columns in the
-    !        matrix defined by the pivot column and row.  They are the
-    !        dimensions of the submatrix D being altered at this stage.
-    ! melim  and  nelim  are the number of rows and columns in the
-    !        same matrix D, excluding the pivot column and row.
-    ! mleft  and  nleft  are the number of rows and columns
-    !        still left to be factored.
-    ! nzchng is the increase in nonzeros in the matrix that remains
-    !        to be factored after the current elimination
-    !        (usually negative).
-    ! nzleft is the number of nonzeros still left to be factored.
-    ! nspare is the space we leave at the end of the last row or
-    !        column whenever a row or column is being moved to the end
-    !        of its file.  nspare = 1 or 2 might help reduce the
-    !        number of file compressions when storage is tight.
-    !
-    ! The row and column ordering permutes A into the form
-    !
-    !                        ------------------------
-    !                         \                     |
-    !                          \         U1         |
-    !                           \                   |
-    !                            --------------------
-    !                            |\
-    !                            | \
-    !                            |  \
-    !            P A Q   =       |   \
-    !                            |    \
-    !                            |     --------------
-    !                            |     |            |
-    !                            |     |            |
-    !                            | L1  |     A2     |
-    !                            |     |            |
-    !                            |     |            |
-    !                            --------------------
-    !
-    ! where the block A2 is factored as  A2 = L2 U2.
-    ! The phases of the factorization are as follows.
-    !
-    ! Utri   is true when U1 is being determined.
-    !        Any column of length 1 is accepted immediately (if TPP).
-    !
-    ! Ltri   is true when L1 is being determined.
-    !        lu1mar exits as soon as an acceptable pivot is found
-    !        in a row of length 1.
-    !
-    ! spars1 is true while the density of the (modified) A2 is less
-    !        than the parameter dens1 = parmlu(7) = 0.3 say.
-    !        lu1mar searches maxcol columns and maxrow rows,
-    !        where  maxcol = luparm(3),  maxrow = maxcol - 1.
-    !        lu1mxc is used to keep the biggest element at the top
-    !        of all remaining columns.
-    !
-    ! spars2 is true while the density of the modified A2 is less
-    !        than the parameter dens2 = parmlu(8) = 0.6 say.
-    !        lu1mar searches maxcol columns and no rows.
-    !        lu1mxc could fix up only the first maxcol cols (with TPP).
-    !        22 Sep 2000: For simplicity, lu1mxc fixes all modified cols.
-    !
-    ! dense  is true once the density of A2 reaches dens2.
-    !        lu1mar searches only 1 column (the shortest).
-    !        lu1mxc could fix up only the first column (with TPP).
-    !        22 Sep 2000: For simplicity, lu1mxc fixes all modified cols.
-    !------------------------------------------------------------------
+ 
+  
 
-    integer(ip)       :: Hlen, Hlenin, hops, h, calli,         &
+    integer(ip)       :: Hlen, Hlenin, hops, h,          &
                          i, ibest, imax,                       &
                          j, jbest, jmax, lPiv,                 &
                          k, kbest, kk, kslack,                 &
@@ -1061,7 +298,8 @@ contains
                          melim, minfre, minmn, mleft,          &
                          mrank, ncold, nelim, nfill,           &
                          nfree, nleft, nout, nrowd, nrowu,     &
-                         nsing, nspare, nzchng, nzleft
+                         nsing, nspare, nzchng, nzleft,        &
+                         lenUk, lenLk, idummy,l1,l2, lena2
     integer(ip)       :: markc(n), markr(m)
     real(rp)          :: v
 
@@ -1070,7 +308,8 @@ contains
     maxcol = luparm(3)
     lPiv   = luparm(6)
     keepLU = luparm(8) /= 0
-    calli = luparm(9)
+    ilast = luparm(9)
+    jlast = luparm(10)
     TPP    = lPiv == 0  ! Threshold Partial   Pivoting (normal).
     TRP    = lPiv == 1  ! Threshold Rook      Pivoting
     TCP    = lPiv == 2  ! Threshold Complete  Pivoting.
@@ -1078,21 +317,17 @@ contains
 
     densLU = .false.
     maxrow = maxcol - 1
-    if(calli == 1) then
-        lfile  = nelem
-        lrow   = nelem
-        lcol   = nelem
-    else
-        lcol = luparm(22)
-        lrow = luparm(25)
-        lfile = lcol
-    end if
+  
+    lcol = luparm(22)
+    lrow = luparm(25)
+    lfile = lcol
+    
     minmn  = min( m, n )
     maxmn  = max( m, n )
     nzleft = nelem
     nspare = 1
     ldiagU = 0                 ! Keep -Wmaybe-uninitialized happy.
-
+    nslack = luparm(30) 
     if ( keepLU ) then
        lu1    = lena   + 1
     else ! Store only the diagonals of U in the top of memory.
@@ -1161,7 +396,6 @@ contains
        call lu1mxr( mark, i1, m, m, n, lena, inform,       &
                     a, indc, lenc, locc, indr, lenr, locr, &
                     p, markc, markr, Amaxr )
-       if (inform > 0) go to 981
     end if
 
     if (TCP) then ! Set Ha(1:Hlen) = biggest element in each column,
@@ -1865,8 +1099,11 @@ contains
           lcol = locc(jbest)
        end if
 800 end do
+    luparm(9) = ilast
+    luparm(10) = jlast
     luparm(22) = lcol
     luparm(25) = lrow
+    luparm(30) = nslack
     !------------------------------------------------------------------
     ! End of main loop.
     !------------------------------------------------------------------
@@ -1896,7 +1133,7 @@ contains
        ! Don't mess with nrank any more.  Let end of lu1fac handle it.
     end if
 
-    minlen = lenL  +  lenU  +  2*(m + n)
+    
     go to 990
 
     ! Not enough space free after a compress.
@@ -1929,7 +1166,7 @@ contains
 1200 format(' nrowu', i7,     '   i,jbest', 2i7, '   nrowd,ncold', 2i6, &
             '   i,jmax', 2i7, '   aijmax', es10.2)
 
-  end subroutine lu1fad
+  end subroutine lu1pfac
 
   !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
