@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-void clu1fac(
+void clu1setup(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
@@ -35,7 +35,34 @@ void clu1fac(
   int64_t* iwc,
   int64_t* iwr, 
   int64_t* inform);
-
+void clu1pfac(
+  int64_t* m,
+  int64_t* n,
+  int64_t* nelem,
+  int64_t* lena,
+  int64_t* luparm,
+  double* parmlu,
+  double* a,
+  int64_t* indc,
+  int64_t* indr,
+  int64_t* p,
+  int64_t* q,
+  int64_t* lenc,
+  int64_t* lenr,
+  int64_t* locc,
+  int64_t* locr,
+  int64_t* iploc,
+  int64_t* iqloc,
+  int64_t* ipinv,
+  int64_t* iqinv,
+  double* w,
+  int64_t* lenH,
+  double* Ha,
+  int64_t* Hj,
+  int64_t* Hk,
+  double* Amaxr,
+  int64_t* iwc,
+  int64_t* iwr);
 void clu6sol(
   int64_t* mode,
   int64_t* m,

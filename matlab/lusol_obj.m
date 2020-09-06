@@ -134,7 +134,13 @@ classdef lusol_obj < handle
     depcol_lx = 0; % logical index indicating dependent columns
     int_class = 'int64'; % integer class used for integer arrays
     int_ptr_class = 'int64Ptr'; % integer class for libpointers
-
+    
+    lenH_ptr =0;
+    Ha_ptr = 0;
+    Hj_ptr = 0;
+    Hk_ptr =0;
+    Amaxr_ptr = 0;
+    
   end
 
   methods (Static)
@@ -911,7 +917,7 @@ classdef lusol_obj < handle
         lena2 = lena - m
         locH = lena
         lmaxr = lena2 +1
-      else if (TCP) then
+      elseif (TCP) then
         lenH = 1 
         lena2 = lena 
         locH = lena2 + 1
@@ -945,7 +951,12 @@ classdef lusol_obj < handle
         obj.iqloc_ptr, ...
         obj.ipinv_ptr, ...
         obj.iqinv_ptr, ...
-        w_ptr, ...
+        w_ptr,...
+        obj.lenH_ptr,...
+        obj.Ha_ptr,...
+        obj.Hj_ptr,...
+        obj.Hk_ptr,...
+        obj.Amax_ptr,
         obj.iwc_ptr, ...
         obj.iwr_ptr, ...
         ret_inform_ptr);
