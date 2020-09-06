@@ -246,27 +246,124 @@ contains
 
   end subroutine lu1setup
 
+  subroutine lu2lu( m      , n    , nelem  , lena  , luparm, parmlu,       &
+                     a      , indc , indr   , p     , q     ,               &
+                     lenc   , lenr , locc   , locr  ,                       &
+                     iploc  , iqloc, ipinv  , iqinv , w     ,               &
+                     lua    , luindc, luindr, lulenc, lulenr,               &
+                     lulocc , lulocr, luiqloc, lenU,nrank)
+    
+    integer(ip),   intent(in)    :: m, n, nelem, lena,lenU,nrank
+
+    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
+                                    p(m)      , q(n)      ,            &
+                                    lenc(n)   , lenr(m)   ,            &
+                                    iploc(n)  , iqloc(m)  ,            &
+                                    ipinv(m)  , iqinv(n)  ,            &
+                                    locc(n)   , locr(m)   ,            &
+                                    luindc(lena), luindr(lena) ,       &
+                                    lulenc(n) , lulenr(n) ,            &
+                                    lulocc(n),  lulocr(m) ,            &
+                                    luiqloc(m)
+    real(rp),      intent(inout) :: parmlu(30), a(lena), w(n),lua(lena)
+    logical                :: keepLU, TCP, TPP, TRP, TSP
+
+    integer(ip)            :: i, idummy, j, jsing, jumin,              &
+                              k, l, l2, lena2, lenH, lenL,             &
+                              lenLk,  lenUk, lerr,                     &
+                              ll, llsave, lm, lmaxr, locH,             &
+                              lprint, lPiv, lrow, ltopl,               &
+                              lu, mersum, minlen, nbump,               &
+                              ncp, ndens1, ndens2,                     &
+                              nLtri, nmove, nout,                      &
+                              nsing, numl0, numnz, nslack, nUtri,      &
+                              oldnrank
+    lPiv   = luparm(6)
+
+    TPP    = lPiv == 0  ! Threshold Partial   Pivoting (normal).
+    TRP    = lPiv == 1  ! Threshold Rook      Pivoting
+    TCP    = lPiv == 2  ! Threshold Complete  Pivoting.
+    TSP    = lPiv == 3  ! Threshold Symmetric Pivoting.
+    
+   
+    lena2 = 0
+    if (TPP .or. TSP) then
+        lena2 = lena
+    else if (TRP) then
+        lena2 = lena - m
+    else if (TCP) then
+        lena2 = lena - n
+    end if 
+    
+     
+    lu     = luparm(24)
+    ll     = lena -luparm(23) + 1
+    lm     = lena2 + 1
+    lrow   = lenU
+    numL0  = 0
+    oldnrank = luparm(16)
+    do k = (oldnrank+1),(oldnrank+nrank)
+        i       =   p(k)
+        lenUk   = - lenr(i)
+        lulenr(i) =   lenUk
+        j       =   q(k)
+        lenLk   = - lenc(j) - 1
+        if (lenLk > 0) then
+           numl0        = numl0 + 1
+           luiqloc(numl0) = lenLk
+        end if
+
+        do idummy = 1, lenLk
+          ll       = ll - 1
+          lm       = lm - 1
+          lua(ll)    = a(lm)
+          luindc(ll) = indc(lm)
+          luindr(ll) = indr(lm)
+        end do
+
+        lulocr(i) = lu + 1
+        l2      = lm - 1
+        lm      = lm - lenUk
+
+        do l = lm, l2
+           lu       = lu + 1
+           lua(lu)    = a(l)
+           luindr(lu) = indr(l)
+        end do
+    end do
+
+    lulenc(1:numl0) = luiqloc(1:numl0)
+    lulocc(1:n)     = 0  
+    luparm(16) = luparm(16) + nrank
+    return 
+  end subroutine lu2lu
   subroutine lu1pfac( &
     m, n, nelem , lena, luparm, parmlu,             &
     a, indc, indr, p, q,lenc,lenr,locc,locr,        & 
     iploc , iqloc , ipinv , iqinv , w,              &
-    lenH  , Ha, Hj, Hk, Amaxr,    &
+    lua, luindc,luindr,lulenc,lulenr,lulocc,lulocr,  &
+    luiqloc, lenH  , Ha, Hj, Hk, Amaxr,    &
     iwc,iwr)
 
     integer(ip),   intent(in)    :: m, n, nelem, lena, lenH
-    integer(ip),   intent(inout) :: luparm(30),ilast,jlast
-    real(rp),      intent(inout) :: parmlu(30), a(lena), Amaxr(m),     &
-                                    w(n), Ha(lenH)
+    integer(ip),   intent(inout) :: luparm(30)
+    real(rp),      intent(inout) :: parmlu(30), a(lena), lua(lena),    &
+                                    Amaxr(m),w(n), Ha(lenH)
     integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
+                                    luindc(lena),luindr(lena),         &
                                     p(m)    , q(n)    ,                &
                                     lenc(n)   , lenr(m)   ,            &
                                     locc(n) , locr(m) ,                &
                                     iploc(n)  , iqloc(m)  ,            &
                                     ipinv(m), iqinv(n),                &
-                                    Hj(lenH)  , Hk(lenH),               &
+                                    lulenc(n), lulenr(m) ,             &
+                                    lulocc(n), lulocr(m),              &
+                                    luiqloc(m),                        &
+                                    Hj(lenH)  , Hk(lenH),              &
                                     iwc(n), iwr(m) 
 
-    integer(ip)                 :: inform, lenL  , lenU  , nslack      &
+    integer(ip)                 :: inform, lenL  , lenU  , nslack,      &
                                     minlen, mersum,     &
                                     nUtri , nLtri , ndens1, ndens2, nrank
     real(rp)                    :: Lmax, Umax, DUmax, DUmin, Akmax
@@ -299,7 +396,8 @@ contains
                          mrank, ncold, nelim, nfill,           &
                          nfree, nleft, nout, nrowd, nrowu,     &
                          nsing, nspare, nzchng, nzleft,        &
-                         lenUk, lenLk, idummy,l1,l2, lena2
+                         lenUk, lenLk, idummy,l1,l2, lena2,    &
+                         ilast, jlast
     integer(ip)       :: markc(n), markr(m)
     real(rp)          :: v
 
@@ -1099,14 +1197,16 @@ contains
           lcol = locc(jbest)
        end if
 800 end do
-    luparm(9) = ilast
-    luparm(10) = jlast
-    luparm(22) = lcol
-    luparm(25) = lrow
-    luparm(30) = nslack
     !------------------------------------------------------------------
     ! End of main loop.
     !------------------------------------------------------------------
+    luparm(9) = ilast
+    luparm(10) = jlast
+    luparm(22) = lcol
+    luparm(23) = luparm(23) + lenL
+    luparm(24) = luparm(24) + lenU
+    luparm(25) = lrow 
+    luparm(30) = nslack
 
     !------------------------------------------------------------------
     ! Normal exit.
@@ -1133,7 +1233,10 @@ contains
        ! Don't mess with nrank any more.  Let end of lu1fac handle it.
     end if
 
-    
+    call lu2lu(m, n, nelem, lena, luparm, parmlu, a, indc, indr, p, q, &
+          lenc, lenr, locc, locr, iploc, iqloc, ipinv, iqinv, w, &
+          lua, luindc, luindr, lulenc, lulenr, lulocc, lulocr, &
+          luiqloc, lenU, nrank)
     go to 990
 
     ! Not enough space free after a compress.

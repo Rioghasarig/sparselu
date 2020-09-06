@@ -1,7 +1,7 @@
 #include "clusol.h"
 
 // declarations for fortran function calls
-void __lusol_MOD_lu1fac(
+void __lusol_MOD_lu1setup(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
@@ -33,6 +33,42 @@ void __lusol_MOD_lu1fac(
   int64_t* iwc,
   int64_t* iwr,
   int64_t* inform);
+void __lusol_MOD_clu1pfac(
+  int64_t* m,
+  int64_t* n,
+  int64_t* nelem,
+  int64_t* lena,
+  int64_t* luparm,
+  double* parmlu,
+  double* a,
+  int64_t* indc,
+  int64_t* indr,
+  int64_t* p,
+  int64_t* q,
+  int64_t* lenc,
+  int64_t* lenr,
+  int64_t* locc,
+  int64_t* locr,
+  int64_t* iploc,
+  int64_t* iqloc,
+  int64_t* ipinv,
+  int64_t* iqinv,
+  double* w,
+  double* lua,
+  int64_t* luindc,
+  int64_t* luindr,
+  int64_t* lulenc,
+  int64_t* lulenr,
+  int64_t* lulocc,
+  int64_t* lulocr,
+  int64_t* luiqloc, 
+  int64_t* lenH,
+  double* Ha,
+  int64_t* Hj,
+  int64_t* Hk,
+  double* Amaxr,
+  int64_t* iwc,
+  int64_t* iwr);
 
 void __lusol_MOD_lu6sol(
   int64_t* mode,
@@ -222,7 +258,7 @@ void lu8rpr_(
   int64_t* inform);
 
 // c interface function definitions
-void clu1fac(
+void clu1setup(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
@@ -254,10 +290,48 @@ void clu1fac(
   int64_t* iwc,
   int64_t* iwr,
   int64_t* inform) {
-  __lusol_MOD_lu1fac(m,n,nelem,lena,luparm,parmlu,a,indc,indr,p,q,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,lua,luindc,
+  __lusol_MOD_lu1setup(m,n,nelem,lena,luparm,parmlu,a,indc,indr,p,q,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,lua,luindc,
   luindr,lulenc,lulenr,lulocc,lulocr,luiqloc,iwc,iwr,inform);
 }
-
+void clu1pfac(
+  int64_t* m,
+  int64_t* n,
+  int64_t* nelem,
+  int64_t* lena,
+  int64_t* luparm,
+  double* parmlu,
+  double* a,
+  int64_t* indc,
+  int64_t* indr,
+  int64_t* p,
+  int64_t* q,
+  int64_t* lenc,
+  int64_t* lenr,
+  int64_t* locc,
+  int64_t* locr,
+  int64_t* iploc,
+  int64_t* iqloc,
+  int64_t* ipinv,
+  int64_t* iqinv,
+  double* w,
+  double* lua,
+  int64_t* luindc,
+  int64_t* luindr,
+  int64_t* lulenc,
+  int64_t* lulenr,
+  int64_t* lulocc,
+  int64_t* lulocr,
+  int64_t* luiqloc, 
+  int64_t* lenH,
+  double* Ha,
+  int64_t* Hj,
+  int64_t* Hk,
+  double* Amaxr,
+  int64_t* iwc,
+  int64_t* iwr){
+    __lusol_MOD_lu1pfac(m,n,nelem,lena,luparm,parmlu,a,indc,indr,p,q,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,
+                        lua,luindc,luindr,lulenc,lulenr,lulocc,lulocr,luiqloc,lenH,Ha,Hj,Hk,Amaxr,iwc,iwr);    
+}
 void clu6sol(
   int64_t* mode,
   int64_t* m,
