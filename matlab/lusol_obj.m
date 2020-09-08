@@ -140,7 +140,7 @@ classdef lusol_obj < handle
     Hj_ptr = 0;
     Hk_ptr =0;
     Amaxr_ptr = 0;
-    
+    lena2_ptr = 0; 
   end
 
   methods (Static)
@@ -472,7 +472,7 @@ classdef lusol_obj < handle
       
       obj.iqinv_ptr = libpointer(obj.int_ptr_class,iqinv);
       obj.iwc_ptr = libpointer(obj.int_ptr_class, iwc);
-
+    
     end
 
     function update_check(obj)
@@ -908,27 +908,27 @@ classdef lusol_obj < handle
       lena = obj.nzmax_ptr.Value;   
 
       if( TPP || TSP)
-        lenH = 1
-        lena2 = lena
-        locH = lena
-        lmaxr =1
+        lenH = 1;
+        lena2 = lena;
+        locH = lena;
+        lmaxr =1;
       elseif (TRP)
-        lenH = 1
-        lena2 = lena - m
-        locH = lena
-        lmaxr = lena2 +1
-      elseif (TCP) then
-        lenH = 1 
-        lena2 = lena 
-        locH = lena2 + 1
-        lmaxr = 1
+        lenH = 1;
+        lena2 = lena - m;
+        locH = lena;
+        lmaxr = lena2 +1;
+      elseif (TCP)
+        lenH = 1; 
+        lena2 = lena; 
+        locH = lena2 + 1;
+        lmaxr = 1;
       end
       obj.lena2_ptr = libpointer(obj.int_ptr_class,lena2);       
       obj.lenH_ptr = libpointer(obj.int_ptr_class, lenH);
-      obj.Ha_ptr = obj.a_ptr + (locH-1)
-      obj.Hj_ptr = obj.indc_ptr + (locH-1)
-      obj.Hk_ptr = obj.indr_ptr + (locH-1)
-      obj.Amaxr_ptr = obj.a_ptr + (lmaxr-1)
+      obj.Ha_ptr = obj.a_ptr + (locH-1);
+      obj.Hj_ptr = obj.indc_ptr + (locH-1);
+      obj.Hk_ptr = obj.indr_ptr + (locH-1);
+      obj.Amaxr_ptr = obj.a_ptr + (lmaxr-1);
       % run lusol
       ret_inform_ptr = libpointer(obj.int_ptr_class,0);
       calllib('libclusol','clu1pfac', ...
@@ -952,14 +952,21 @@ classdef lusol_obj < handle
         obj.ipinv_ptr, ...
         obj.iqinv_ptr, ...
         w_ptr,...
+        obj.lua_ptr, ...
+        obj.luindc_ptr, ...
+        obj.luindr_ptr, ...
+        obj.lulenc_ptr, ...
+        obj.lulenr_ptr, ...
+        obj.lulocc_ptr, ...
+        obj.lulocr_ptr, ...
+        obj.luiqloc_ptr, ...
         obj.lenH_ptr,...
         obj.Ha_ptr,...
         obj.Hj_ptr,...
         obj.Hk_ptr,...
-        obj.Amax_ptr,
+        obj.Amaxr_ptr,...
         obj.iwc_ptr, ...
-        obj.iwr_ptr, ...
-        ret_inform_ptr);
+        obj.iwr_ptr);
     end 
     % methods to collect information about matrix and factorization
 
