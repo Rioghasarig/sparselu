@@ -251,7 +251,7 @@ contains
                      lenc   , lenr , locc   , locr  ,                       &
                      iploc  , iqloc, ipinv  , iqinv , w     ,               &
                      lua    , luindc, luindr, lulenc, lulenr,               &
-                     lulocc , lulocr, luiqloc, lenU,nrank)
+                     lulocc , lulocr, luiqloc, lenL, lenU,nrank)
     
     integer(ip),   intent(in)    :: m, n, nelem, lena,lenU,nrank
 
@@ -336,17 +336,19 @@ contains
     lulenc(1:numl0) = luiqloc(1:numl0)
     lulocc(1:n)     = 0  
     luparm(16) = luparm(16) + nrank
+    luparm(24) = luparm(24) + lenU
+    luparm(23) = luparm(23) + lenL
     return 
   end subroutine lu2lu
   subroutine lu1pfac( &
     m, n, nelem , lena, luparm, parmlu,             &
-    a, indc, indr, p, q,lenc,lenr,locc,locr,        & 
+    a, indc, indr, p, q,kstep, lenc,lenr,locc,locr,        & 
     iploc , iqloc , ipinv , iqinv , w,              &
     lua, luindc,luindr,lulenc,lulenr,lulocc,lulocr,  &
     luiqloc, lenH  , Ha, Hj, Hk, Amaxr,    &
     iwc,iwr)
 
-    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH
+    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH,kstep
     integer(ip),   intent(inout) :: luparm(30)
     real(rp),      intent(inout) :: parmlu(30), a(lena), lua(lena),    &
                                     Amaxr(m),w(n), Ha(lenH)
@@ -525,7 +527,7 @@ contains
     mleft  = m + 1
     nleft  = n + 1
 
-    do 800 nrowu = 1, 2
+    do 800 nrowu = 1, kstep
 
        ! mktime = (nrowu / ntime) + 4
        ! eltime = (nrowu / ntime) + 9
@@ -1203,8 +1205,6 @@ contains
     luparm(9) = ilast
     luparm(10) = jlast
     luparm(22) = lcol
-    luparm(23) = luparm(23) + lenL
-    luparm(24) = luparm(24) + lenU
     luparm(25) = lrow 
     luparm(30) = nslack
 
@@ -1236,7 +1236,7 @@ contains
     call lu2lu(m, n, nelem, lena, luparm, parmlu, a, indc, indr, p, q, &
           lenc, lenr, locc, locr, iploc, iqloc, ipinv, iqinv, w, &
           lua, luindc, luindr, lulenc, lulenr, lulocc, lulocr, &
-          luiqloc, lenU, nrank)
+          luiqloc,lenL, lenU, nrank)
     go to 990
 
     ! Not enough space free after a compress.

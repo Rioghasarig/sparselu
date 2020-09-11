@@ -898,7 +898,7 @@ classdef lusol_obj < handle
 
     end
     
-    function pfactorize(obj)
+    function pfactorize(obj,kstep)
       [m,n] = obj.size();
       w_ptr = libpointer('doublePtr',zeros(n,1));
       TPP = obj.pivot == 0;
@@ -929,6 +929,9 @@ classdef lusol_obj < handle
       obj.Hj_ptr = obj.indc_ptr + (locH-1);
       obj.Hk_ptr = obj.indr_ptr + (locH-1);
       obj.Amaxr_ptr = obj.a_ptr + (lmaxr-1);
+
+      kstep_ptr = libpointer(obj.int_ptr_class,kstep); 
+
       % run lusol
       ret_inform_ptr = libpointer(obj.int_ptr_class,0);
       calllib('libclusol','clu1pfac', ...
@@ -943,6 +946,7 @@ classdef lusol_obj < handle
         obj.indr_ptr, ...
         obj.p_ptr, ...
         obj.q_ptr, ...
+        kstep_ptr, ...
         obj.lenc_ptr, ...
         obj.lenr_ptr, ...
         obj.locc_ptr, ...
@@ -1202,6 +1206,10 @@ classdef lusol_obj < handle
         % increment row start pointer
         k1 = k1+len;
       end
+      disp('ui')
+      disp(ui)
+      disp('uj')
+      disp(uj)
       % generate sparse matrix
       U = sparse(ui,uj,ua,m,n);
       % handle optional permutation of U

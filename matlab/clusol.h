@@ -47,6 +47,7 @@ void clu1pfac(
   int64_t* indr,
   int64_t* p,
   int64_t* q,
+  int64_t* kstep, 
   int64_t* lenc,
   int64_t* lenr,
   int64_t* locc,
