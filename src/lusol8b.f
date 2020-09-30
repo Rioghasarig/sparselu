@@ -589,7 +589,6 @@
 !     Eliminate any nonzeros in  v  below the trapezoid.
 !     ------------------------------------------------------------------
   120 if (nrank .lt. m) then
-         nrank  = nrank + 1
          jelm   = 0
 
          call lu7elm( m, n, jelm, v,
@@ -599,7 +598,7 @@
      $                inform, diag )
          if (inform .eq. 7) go to 970
 
-         if (inform .eq. 0) nrank = nrank - 1
+         if (inform .eq. 1) nrank = nrank + 1
       end if
 
 !     ------------------------------------------------------------------

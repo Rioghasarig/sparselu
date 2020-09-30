@@ -747,51 +747,8 @@ contains
 
           ! See if what's left is as dense as dens2.
 
-          if ( spars2 ) then
-             if (nzleft  >=  (dens2 * mleft) * nleft) then
-                spars2 = .false.
-                dense  = .true.
-                ndens2 =  nleft
-                maxcol =  1
-                if (lprint >= 50) then
-                   write(nout, 1100) 'spars2 ended.  dense = true'
-                end if
-             end if
-          end if
        end if
 
-       !---------------------------------------------------------------
-       ! See if we can finish quickly.
-       !---------------------------------------------------------------
-       if ( dense  ) then
-          lenD   = mleft * nleft
-          nfree  = lu1 - 1
-
-          ! 28 Sep 2015: Change 2 to 3 for safety.
-          if (nfree >= 3 * lenD) then
-
-             ! There is room to treat the remaining matrix as
-             ! a dense matrix D.
-             ! We may have to compress the column file first.
-             ! 12 Nov 1999: D used to be put at the
-             !              beginning of free storage (lD = lcol + 1).
-             !              Now put it at the end     (lD = lu1 - lenD)
-             !              so the left-shift in lu1ful will not
-             !              involve overlapping storage
-             !              (fatal with parallel dcopy).
-
-             densLU = .true.
-             ndens2 = nleft
-             lD     = lu1 - lenD
-             if (lcol >= lD) then
-                call lu1rec( n, .true., luparm, lcol, jlast, &
-                             lena, a, indc, lenc, locc )
-                lfile  = lcol
-             end if
-
-             go to 900
-          end if
-       end if
 
        !===============================================================
        ! The best aij has been found.
@@ -1218,20 +1175,12 @@ contains
     call lu1pq3( n, lenc, q, iwc, mrank )
     !nrank  = min( mrank, nrank )
 
-    if ( densLU ) then
-       call lu1ful( m     , n    , lena , lenD , lu1 , TPP, &
-                    mleft , nleft, nrank, nrowu,            &
-                    lenL  , lenU , nsing,                   &
-                    keepLU, small,                          &
-                    a     , a(lD), indc , indr , p   , q,   &
-                    lenc  , lenr , locc , ipinv, locr )
        !***     21 Dec 1994: Bug in next line.
        !***     nrank  = nrank - nsing.  Changed to next line:
        !***     nrank  = minmn - nsing
 
        !***     26 Mar 2006: Previous line caused bug with m<n and nsing>0.
        ! Don't mess with nrank any more.  Let end of lu1fac handle it.
-    end if
 
     call lu2lu(m, n, nelem, lena, luparm, parmlu, a, indc, indr, p, q, &
           lenc, lenr, locc, locr, iploc, iqloc, ipinv, iqinv, w, &

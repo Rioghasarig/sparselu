@@ -14,7 +14,7 @@ ifneq ($(DARWIN),)
 else
   # C compiler for linux
   CC := gcc
-  CPPFLAGS :=
+  CPPFLAGS := -g
   CFLAGS := -m64 -fPIC
 endif
 
@@ -35,7 +35,7 @@ else
   F90FLAGS :=  -m64 -fPIC -Jsrc -g $(FOPT)
   # Fortran 77 compiler
   F77C := gfortran
-  F77FLAGS := -m64 -fPIC -fdefault-integer-8 $(FOPT)
+  F77FLAGS := -m64 -fPIC -fdefault-integer-8 -g $(FOPT)
 endif
 
 # Matlab
