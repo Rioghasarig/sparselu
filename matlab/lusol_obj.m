@@ -356,7 +356,7 @@ classdef lusol_obj < handle
       %
 
       % allocate parameter vectors
-      luparm = zeros(30,1,obj.int_class);
+      luparm = zeros(40,1,obj.int_class);
       parmlu = zeros(30,1,'double');
 
       % set parameter values
@@ -901,37 +901,19 @@ classdef lusol_obj < handle
     function pfactorize(obj,kstep)
       [m,n] = obj.size();
       w_ptr = libpointer('doublePtr',zeros(n,1));
-      TPP = obj.pivot == 0;
-      TRP = obj.pivot == 1;
-      TCP = obj.pivot == 2;
-      TSP = obj.pivot == 3;
-      lena = obj.nzmax_ptr.Value;   
-
-      if( TPP || TSP)
-        lenH = 1;
-        lena2 = lena;
-        locH = lena;
-        lmaxr =1;
-      elseif (TRP)
-        lenH = 1;
-        lena2 = lena - m;
-        locH = lena;
-        lmaxr = lena2 +1;
-      elseif (TCP)
-        lenH = 1; 
-        lena2 = lena; 
-        locH = lena2 + 1;
-        lmaxr = 1;
-      end
-      obj.lena2_ptr = libpointer(obj.int_ptr_class,lena2);       
+      luparm = obj.luparm_ptr.value;
+      lenH = luparm(31);
+      locH = luparm(32); 
+      lmaxr = luparm(33);
+      lena2 = luparm(34);
       obj.lenH_ptr = libpointer(obj.int_ptr_class, lenH);
       obj.Ha_ptr = obj.a_ptr + (locH-1);
       obj.Hj_ptr = obj.indc_ptr + (locH-1);
       obj.Hk_ptr = obj.indr_ptr + (locH-1);
       obj.Amaxr_ptr = obj.a_ptr + (lmaxr-1);
-
+      obj.lena2_ptr = libpointer(obj.int_ptr_class, lena2);  
       kstep_ptr = libpointer(obj.int_ptr_class,kstep); 
-
+      
       % run lusol
       ret_inform_ptr = libpointer(obj.int_ptr_class,0);
       calllib('libclusol','clu1pfac', ...
@@ -965,9 +947,9 @@ classdef lusol_obj < handle
         obj.lulocr_ptr, ...
         obj.luiqloc_ptr, ...
         obj.lenH_ptr,...
-        obj.Ha_ptr,...
-        obj.Hj_ptr,...
-        obj.Hk_ptr,...
+        obj.Ha_ptr, ...
+        obj.Hj_ptr, ...
+        obj.Hk_ptr, ...
         obj.Amaxr_ptr,...
         obj.iwc_ptr, ...
         obj.iwr_ptr);

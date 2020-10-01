@@ -39,7 +39,7 @@ void clu1pfac(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
-  int64_t* lena,
+  int64_t* lena2,
   int64_t* luparm,
   double* parmlu,
   double* a,
@@ -69,7 +69,7 @@ void clu1pfac(
   double* Ha,
   int64_t* Hj,
   int64_t* Hk,
-  double* Amaxr,
+  double* Amaxr, 
   int64_t* iwc,
   int64_t* iwr);
 void clu6sol(

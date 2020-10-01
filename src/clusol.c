@@ -37,7 +37,7 @@ void __lusol_MOD_lu1pfac(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
-  int64_t* lena,
+  int64_t* lena2,
   int64_t* luparm,
   double* parmlu,
   double* a,
@@ -67,7 +67,7 @@ void __lusol_MOD_lu1pfac(
   double* Ha,
   int64_t* Hj,
   int64_t* Hk,
-  double* Amaxr,
+  double* Amaxr, 
   int64_t* iwc,
   int64_t* iwr);
 
@@ -298,7 +298,7 @@ void clu1pfac(
   int64_t* m,
   int64_t* n,
   int64_t* nelem,
-  int64_t* lena,
+  int64_t* lena2,
   int64_t* luparm,
   double* parmlu,
   double* a,
@@ -331,8 +331,8 @@ void clu1pfac(
   double* Amaxr,
   int64_t* iwc,
   int64_t* iwr){
-    __lusol_MOD_lu1pfac(m,n,nelem,lena,luparm,parmlu,a,indc,indr,p,q,kstep,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,
-                        lua,luindc,luindr,lulenc,lulenr,lulocc,lulocr,luiqloc,lenH,Ha,Hj,Hk,Amaxr,iwc,iwr);    
+    __lusol_MOD_lu1pfac(m,n,nelem,lena2,luparm,parmlu,a,indc,indr,p,q,kstep,lenc,lenr,locc,locr,iploc,iqloc,ipinv,iqinv,w,
+                        lua,luindc,luindr,lulenc,lulenr,lulocc,lulocr,luiqloc,lenH,Ha, Hj, Hk, Amaxr, iwc,iwr);    
 }
 void clu6sol(
   int64_t* mode,

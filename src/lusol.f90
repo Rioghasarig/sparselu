@@ -108,7 +108,7 @@ contains
 
     integer(ip),   intent(in)    :: m, n, nelem, lena
 
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
                                     p(m)      , q(n)      ,            &
                                     lenc(n)   , lenr(m)   ,            &
@@ -237,6 +237,33 @@ contains
     call lu1pq1( n, m, lenc, q, iqloc, iqinv, indc(numnz + 1) )
     call lu1slk( m, n, lena, q, iqloc, a, indc, locc, nslack, w )
 
+    lenH = 0
+    lena2 = 0
+    locH = 0
+    lmaxr = 0
+
+    if (TPP .or. TSP) then
+       lenH   = 1
+       lena2  = lena
+       locH   = lena
+       lmaxr  = 1
+    else if (TRP) then
+       lenH   = 1             ! Dummy
+       lena2  = lena  - m     ! Reduced length of      a
+       locH   = lena          ! Dummy
+       lmaxr  = lena2 + 1     ! Start of Amaxr      in a
+    else if (TCP) then
+       lenH   = n             ! Length of heap
+       lena2  = lena  - lenH  ! Reduced length of      a, indc, indr
+       locH   = lena2 + 1     ! Start of Ha, Hj, Hk in a, indc, indr
+       lmaxr  = 1             ! Dummy
+    end if    
+    luparm(31) = lenH
+    luparm(32) = locH
+    luparm(33) = lmaxr
+    luparm(34) = lena2
+    luparm(35) = lena  
+
 
     luparm(9) = m
     luparm(10) = n
@@ -251,11 +278,11 @@ contains
                      lenc   , lenr , locc   , locr  ,                       &
                      iploc  , iqloc, ipinv  , iqinv , w     ,               &
                      lua    , luindc, luindr, lulenc, lulenr,               &
-                     lulocc , lulocr, luiqloc, lenL, lenU,nrank)
+                     lulocc , lulocr, luiqloc, lenL, lenU,nrank )
     
-    integer(ip),   intent(in)    :: m, n, nelem, lena,lenU,nrank
+    integer(ip),   intent(in)    :: m, n, nelem, lena,lenU,lenL,nrank
 
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
                                     p(m)      , q(n)      ,            &
                                     lenc(n)   , lenr(m)   ,            &
@@ -270,7 +297,7 @@ contains
     logical                :: keepLU, TCP, TPP, TRP, TSP
 
     integer(ip)            :: i, idummy, j, jsing, jumin,              &
-                              k, l, l2, lena2, lenH, lenL,             &
+                              k, l, l2, lena2, lenH,                   &
                               lenLk,  lenUk, lerr,                     &
                               ll, llsave, lm, lmaxr, locH,             &
                               lprint, lPiv, lrow, ltopl,               &
@@ -279,22 +306,8 @@ contains
                               nLtri, nmove, nout,                      &
                               nsing, numl0, numnz, nslack, nUtri,      &
                               oldnrank
-    lPiv   = luparm(6)
-
-    TPP    = lPiv == 0  ! Threshold Partial   Pivoting (normal).
-    TRP    = lPiv == 1  ! Threshold Rook      Pivoting
-    TCP    = lPiv == 2  ! Threshold Complete  Pivoting.
-    TSP    = lPiv == 3  ! Threshold Symmetric Pivoting.
-    
    
-    lena2 = 0
-    if (TPP .or. TSP) then
-        lena2 = lena
-    else if (TRP) then
-        lena2 = lena - m
-    else if (TCP) then
-        lena2 = lena - n
-    end if 
+    lena2 = luparm(34); 
     
      
     lu     = luparm(24)
@@ -340,20 +353,20 @@ contains
     luparm(23) = luparm(23) + lenL
     return 
   end subroutine lu2lu
+
   subroutine lu1pfac( &
-    m, n, nelem , lena, luparm, parmlu,             &
+    m, n, nelem , lena2, luparm, parmlu,             &
     a, indc, indr, p, q,kstep, lenc,lenr,locc,locr,        & 
     iploc , iqloc , ipinv , iqinv , w,              &
     lua, luindc,luindr,lulenc,lulenr,lulocc,lulocr,  &
-    luiqloc, lenH  , Ha, Hj, Hk, Amaxr,    &
-    iwc,iwr)
+    luiqloc, lenH, Ha, Hj, Hk, Amaxr, iwc,iwr)
 
-    integer(ip),   intent(in)    :: m, n, nelem, lena, lenH,kstep
-    integer(ip),   intent(inout) :: luparm(30)
-    real(rp),      intent(inout) :: parmlu(30), a(lena), lua(lena),    &
-                                    Amaxr(m),w(n), Ha(lenH)
-    integer(ip),   intent(inout) :: indc(lena), indr(lena),            &
-                                    luindc(lena),luindr(lena),         &
+    integer(ip),   intent(in)    :: m, n, nelem, lena2, lenH,kstep
+    integer(ip),   intent(inout) :: luparm(40)
+    real(rp),      intent(inout) :: parmlu(30), a(lena2), lua(lena2),    &
+                                    w(n), Ha(lenH), Amaxr(m)
+    integer(ip),   intent(inout) :: indc(lena2), indr(lena2),            &
+                                    luindc(lena2),luindr(lena2),         &
                                     p(m)    , q(n)    ,                &
                                     lenc(n)   , lenr(m)   ,            &
                                     locc(n) , locr(m) ,                &
@@ -361,20 +374,19 @@ contains
                                     ipinv(m), iqinv(n),                &
                                     lulenc(n), lulenr(m) ,             &
                                     lulocc(n), lulocr(m),              &
-                                    luiqloc(m),                        &
-                                    Hj(lenH)  , Hk(lenH),              &
-                                    iwc(n), iwr(m) 
+                                    luiqloc(m),iwc(n), iwr(m),         &
+                                    Hj(lenH), Hk(lenH)
 
     integer(ip)                 :: inform, lenL  , lenU  , nslack,      &
-                                    minlen, mersum,     &
-                                    nUtri , nLtri , ndens1, ndens2, nrank
-    real(rp)                    :: Lmax, Umax, DUmax, DUmin, Akmax
+                                    minlen, mersum, nUtri , nLtri ,     &
+                                    ndens1, ndens2, nrank, locH, lmaxr, lena 
 
+    real(rp)                    :: Lmax, Umax, DUmax, DUmin, Akmax    
  
- 
- 
+  
     logical                :: Utri, Ltri, spars1, spars2, dense,       &
                               densLU, keepLU, TCP, TPP, TRP, TSP
+
     real(rp)               :: abest, aijmax, aijtol, amax, &
                               dens1, dens2, diag,          &
                               Lij, Ltol, small, Uspace
@@ -398,7 +410,7 @@ contains
                          mrank, ncold, nelim, nfill,           &
                          nfree, nleft, nout, nrowd, nrowu,     &
                          nsing, nspare, nzchng, nzleft,        &
-                         lenUk, lenLk, idummy,l1,l2, lena2,    &
+                         lenUk, lenLk, idummy,l1,l2,     &
                          ilast, jlast
     integer(ip)       :: markc(n), markr(m)
     real(rp)          :: v
@@ -429,11 +441,13 @@ contains
     ldiagU = 0                 ! Keep -Wmaybe-uninitialized happy.
     nslack = luparm(30) 
     if ( keepLU ) then
-       lu1    = lena   + 1
+       lu1    = lena2   + 1
     else ! Store only the diagonals of U in the top of memory.
-       ldiagU = lena   - n
+       ldiagU = lena2   - n
        lu1    = ldiagU + 1
     end if
+
+  
 
     Ltol   = parmlu(1)
     small  = parmlu(3)
@@ -446,7 +460,8 @@ contains
     spars2 = .false.
     dense  = .false.
     kslack = 0        ! 12 Dec 2015: Count slacks accepted during Utri.
-
+    
+    lena = luparm(35) ! For input into lu2lu
     ! Check parameters.
 
     Ltol   = max( Ltol, 1.0001_rp )
@@ -473,9 +488,9 @@ contains
     if (nelem == 0) Dumin = zero
     Akmax  = zero
     hops   = 0
-
+    
     ! More initialization.
-
+    
     if (TPP .or. TSP) then ! Don't worry yet about lu1mxc.
        aijmax = zero
        aijtol = zero
@@ -493,7 +508,7 @@ contains
 
     if (TRP) then ! Find biggest element in each row.
        mark = 0
-       call lu1mxr( mark, i1, m, m, n, lena, inform,       &
+       call lu1mxr( mark, i1, m, m, n, lena2, inform,       &
                     a, indc, lenc, locc, indr, lenr, locr, &
                     p, markc, markr, Amaxr )
     end if
@@ -651,7 +666,7 @@ contains
           !------------------------------------------------------------
           ! if (TPP) then ! 12 Jun 2002: Next line disables lu1mCP below
           if (TPP .or. TCP) then
-             call lu1mar( m    , n     , lena  , maxmn,          &
+             call lu1mar( m    , n     , lena2  , maxmn,          &
                           TCP  , aijtol, Ltol  , maxcol, maxrow, &
                           ibest, jbest , mbest ,                 &
                           a    , indc  , indr  , p     , q,      &
@@ -659,7 +674,7 @@ contains
                           iploc, iqloc )
 
           else if (TRP) then
-             call lu1mRP( m    , n     , lena  , maxmn,     &
+             call lu1mRP( m    , n     , lena2  , maxmn,     &
                           Ltol , maxcol, maxrow,            &
                           ibest, jbest , mbest ,            &
                           a    , indc  , indr  , p    , q,  &
@@ -674,7 +689,7 @@ contains
              !              Hlen , Ha    , Hj    )
 
           else if (TSP) then
-             call lu1mSP( m    , n     , lena  , maxmn, &
+             call lu1mSP( m    , n     , lena2  , maxmn, &
                           Ltol , maxcol, &
                           ibest, jbest , mbest , &
                           a    , indc  , q    , locc , iqloc )
@@ -715,7 +730,7 @@ contains
           !------------------------------------------------------------
         ! if (TPP) then ! 12 Jun 2002: Next line disables lu1mCP below
           if (TPP .or. TCP) then
-             call lu1mar( m    , n     , lena  , maxmn,          &
+             call lu1mar( m    , n     , lena2  , maxmn,          &
                           TCP  , aijtol, Ltol  , maxcol, maxrow, &
                           ibest, jbest , mbest ,                 &
                           a    , indc  , indr  , p     , q,      &
@@ -723,7 +738,7 @@ contains
                           iploc, iqloc )
 
           else if (TRP) then
-             call lu1mRP( m    , n     , lena  , maxmn,     &
+             call lu1mRP( m    , n     , lena2  , maxmn,     &
                           Ltol , maxcol, maxrow,            &
                           ibest, jbest , mbest ,            &
                           a    , indc  , indr  , p    , q,  &
@@ -738,7 +753,7 @@ contains
              !              Hlen , Ha    , Hj    )
 
           else if (TSP) then
-             call lu1mSP( m    , n     , lena  , maxmn, &
+             call lu1mSP( m    , n     , lena2  , maxmn, &
                           Ltol , maxcol,                &
                           ibest, jbest , mbest ,        &
                           a    , indc  , q    , locc , iqloc )
@@ -819,7 +834,7 @@ contains
        nfree  = lfree  - lcol
        if (nfree < minfre  .or.  lcol > limit) then
           call lu1rec( n, .true., luparm, lcol, jlast, &
-                       lena, a, indc, lenc, locc )
+                       lena2, a, indc, lenc, locc )
           lfile  = lcol
           nfree  = lfree - lcol
           if (nfree < minfre) go to 970
@@ -831,7 +846,7 @@ contains
        nfree  = lfree - lrow
        if (nfree < minfre  .or.  lrow > limit) then
           call lu1rec( m, .false., luparm, lrow, ilast, &
-                       lena, a, indr, lenr, locr )
+                       lena2, a, indr, lenr, locr )
           lfile  = lrow
           nfree  = lfree - lrow
           if (nfree < minfre) go to 970
@@ -1006,7 +1021,7 @@ contains
           ! lfirst, lu and nfill have appropriate new values.
 
           call lu1rec( n, .true., luparm, lcol, jlast, &
-                       lena, a, indc, lenc, locc )
+                       lena2, a, indc, lenc, locc )
           lfile  = lcol
           lpivc  = locc(jbest)
           lpivc1 = lpivc + 1
@@ -1030,7 +1045,7 @@ contains
           nfree  = lfree - lrow
           if (nfree < minfre) then
              call lu1rec( m, .false., luparm, lrow, ilast, &
-                          lena, a, indr, lenr, locr )
+                          lena2, a, indr, lenr, locr )
              lfile  = lrow
              lpivr  = locr(ibest)
              lpivr1 = lpivr + 1
@@ -1107,7 +1122,7 @@ contains
              ! 28 Sep 2015: inform is now an output.
 
              mark = mark + 1
-             call lu1mxr( mark, ll1, ll, m, n, lena, inform,     &
+             call lu1mxr( mark, ll1, ll, m, n, lena2, inform,     &
                           a, indc, lenc, locc, indr, lenr, locr, &
                           indc, markc, markr, Amaxr )
                         ! ^^^^  Here are the p(k1:k2) needed by lu1mxr.
@@ -1192,7 +1207,7 @@ contains
     ! Set  minlen  to an estimate of the necessary value of  lena.
 
 970 inform = 7
-    minlen = lena  +  lfile  +  2*(m + n)
+    minlen = lena2  +  lfile  +  2*(m + n)
     go to 990
 
     ! Fatal error.  This will never happen!
@@ -3032,7 +3047,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: n, lena
     integer(ip),   intent(inout) :: ltop
     integer(ip),   intent(out)   :: ilast
-    integer(ip),   intent(inout) :: luparm(30), ind(lena), lenc(n), locc(n)
+    integer(ip),   intent(inout) :: luparm(40), ind(lena), lenc(n), locc(n)
     real(rp),      intent(inout) :: a(lena)
 
     !------------------------------------------------------------------
@@ -4002,7 +4017,7 @@ Colj:     do lc = lc1, lc2
                                     lenc(n), lenr(m), locc(n), locr(m)
     real(rp),      intent(in)    :: a(lena)
 
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30), v(m), w(n)
 
     integer(ip),   intent(out)   :: inform
@@ -4110,7 +4125,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: indc(lena), indr(lena), lenc(n)
     real(rp),      intent(in)    :: a(lena)
 
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30), v(m)
 
     integer(ip),   intent(out)   :: inform
@@ -4178,7 +4193,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: m, n, lena
     integer(ip),   intent(in)    :: indc(lena), indr(lena), lenc(n)
     real(rp),      intent(in)    :: a(lena)
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30), v(m)
     integer(ip),   intent(out)   :: inform
 
@@ -4243,7 +4258,7 @@ Colj:     do lc = lc1, lc2
     real(rp),      intent(in)    :: a(lena)
     real(rp),      intent(in)    :: v(m)
 
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30)
 
     integer(ip),   intent(out)   :: inform
@@ -4325,7 +4340,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: m, n, lena
     integer(ip),   intent(in)    :: indr(lena), p(m), q(n), lenr(m), locr(m)
     real(rp),      intent(in)    :: a(lena)
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30), w(n)
     integer(ip),   intent(out)   :: inform
     real(rp),      intent(out)   :: v(m)
@@ -4401,7 +4416,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: mode, m, n, lena
     integer(ip),   intent(in)    :: indc(lena), indr(lena), lenc(n), locr(m)
     real(rp),      intent(in)    :: a(lena)
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30), v(m)
     integer(ip),   intent(out)   :: inform
 
@@ -4474,7 +4489,7 @@ Colj:     do lc = lc1, lc2
     real(rp),      intent(in)    :: a(lena)
 
     integer(ip),   intent(inout) :: inform
-    integer(ip),   intent(inout) :: luparm(30)
+    integer(ip),   intent(inout) :: luparm(40)
     real(rp),      intent(inout) :: parmlu(30)
 
     real(rp),      intent(inout) :: w(n)
@@ -4740,7 +4755,7 @@ Colj:     do lc = lc1, lc2
 
     integer(ip),   intent(in)    :: m, n, jadd, lena, nrank, &
                                     p(m)
-    integer(ip),   intent(inout) :: luparm(30), lenL, lenU, lrow, &
+    integer(ip),   intent(inout) :: luparm(40), lenL, lenU, lrow, &
                                     indr(lena), lenr(m), locr(m)
     real(rp),      intent(inout) :: parmlu(30), a(lena), v(m)
     integer(ip),   intent(out)   :: inform, klast
@@ -4869,7 +4884,7 @@ Colj:     do lc = lc1, lc2
     integer(ip),   intent(in)    :: m, n, jelm, lena, nrank
     integer(ip),   intent(in)    :: lenU, q(n)   ! not used
     real(rp),      intent(in)    :: v(m)
-    integer(ip),   intent(inout) :: luparm(30), lenL, lrow,       &
+    integer(ip),   intent(inout) :: luparm(40), lenL, lrow,       &
                                     indc(lena), indr(lena), p(m), &
                                     lenr(m), locc(n), locr(m)
     real(rp),      intent(inout) :: parmlu(30), a(lena)
@@ -4994,7 +5009,7 @@ Colj:     do lc = lc1, lc2
 
     integer(ip),   intent(in)    :: m, n, kfirst, klast, lena
     integer(ip),   intent(in)    :: q(n)
-    integer(ip),   intent(inout) :: luparm(30), lenL, lenU, lrow
+    integer(ip),   intent(inout) :: luparm(40), lenL, lenU, lrow
     integer(ip),   intent(inout) :: indc(lena), indr(lena),     &
                                     p(m), lenr(m), locc(n), locr(m)
     real(rp),      intent(inout) :: parmlu(30), a(lena)
@@ -5538,7 +5553,7 @@ Colj:     do lc = lc1, lc2
                      inform, diag, vnorm )
 
     integer(ip),   intent(in)    :: mode1, mode2, m, n, jrep, lena
-    integer(ip),   intent(inout) :: luparm(30), &
+    integer(ip),   intent(inout) :: luparm(40), &
                                     indc(lena), indr(lena), p(m), q(n), &
                                     lenc(n), lenr(m), locc(n), locr(m)
     real(rp),      intent(inout) :: parmlu(30), a(lena), v(m), &
